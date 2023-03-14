@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 struct NexusQ<T> {
-    capacity: usize,
+    length: usize,
     buffer: *mut Vec<T>,
     producer_tracker: ProducerTracker,
     reader_tracker: ReaderTracker,
@@ -29,7 +29,7 @@ impl<T> Drop for NexusQ<T> {
         unsafe {
             if current < 0 {
                 (*self.buffer).set_len(0);
-            } else if (current as usize) < self.capacity {
+            } else if (current as usize) < self.length {
                 (*self.buffer).set_len(current as usize);
             }
             drop(Box::from_raw(self.buffer));
@@ -48,7 +48,7 @@ impl<T> NexusQ<T> {
         let buffer = Box::into_raw(buffer);
 
         Self {
-            capacity,
+            length: capacity,
             buffer,
             producer_tracker: Default::default(),
             reader_tracker: ReaderTracker::new(capacity),
@@ -104,39 +104,8 @@ mod tracker_tests {
         assert_eq!(receiver.recv(), 5);
     }
 
-    #[test]
-    fn basic_threaded_channel_test() {
-        let (sender, mut receiver) = make_channel(5);
-
-        let num = 1000;
-        let recv_thread = thread::spawn(move || {
-            let mut values = Vec::with_capacity(num);
-            for _ in 0..num {
-                let v = receiver.recv();
-                values.push(v);
-            }
-            values
-        });
-        thread::sleep(Duration::from_secs_f64(0.01));
-        thread::spawn(move || {
-            for i in 0..num {
-                sender.send(i);
-            }
-        });
-
-        let values = recv_thread.join().expect("couldn't join read thread");
-
-        let expected: Vec<_> = (0..num).collect();
-        assert_eq!(values, expected);
-    }
-
-    #[test]
-    fn contended_threaded_channel_test() {
-        let (sender, receiver) = make_channel(5);
-
-        let num = 1000;
-        let num_senders = 2;
-        let num_receivers = 1;
+    fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
+        let (sender, receiver) = make_channel(buffer_size);
 
         let mut receivers: Vec<_> = (0..(num_receivers - 1)).map(|_| receiver.clone()).collect();
         receivers.push(receiver);
@@ -194,6 +163,38 @@ mod tracker_tests {
             })
             .collect();
 
-        results.iter().for_each(|result| assert!(result.is_empty()));
+        results.iter().for_each(|result| {
+            println!("diff: {:?}", result);
+            assert!(result.is_empty())
+        });
+    }
+
+    #[test]
+    fn one_sender_one_receiver() {
+        test(1, 1, 100, 5);
+    }
+
+    #[test]
+    fn one_sender_two_receiver() {
+        test(1, 2, 100, 5);
+    }
+
+    #[test]
+    fn two_sender_one_receiver() {
+        test(2, 1, 100, 5);
+    }
+
+    #[test]
+    fn two_sender_two_receiver() {
+        test(2, 2, 5000000, 5);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn two_sender_two_receiver_stress() {
+        for i in 0..1000 {
+            println!("run {}", i);
+            test(2, 2, 1000, 5);
+        }
     }
 }

@@ -26,11 +26,17 @@ impl ReaderTracker {
         token.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn update_position(&self, from: usize, to: usize) {
-        debug_assert!(to - from == 1);
+    pub fn update_position(&self, from: i64, to: i64) {
+        // debug_assert!(to - from == 1);
+        debug_assert!(from >= 0);
+        debug_assert!(to >= 0);
 
-        let from_index = from % self.tokens.len();
-        let to_index = to % self.tokens.len();
+        if from == to {
+            return;
+        }
+
+        let from_index = (from as usize) % self.tokens.len();
+        let to_index = (to as usize) % self.tokens.len();
 
         if let Some(to_token) = self.tokens.get(to_index) {
             to_token.fetch_add(1, Ordering::SeqCst);
@@ -47,7 +53,7 @@ impl ReaderTracker {
         if previous == 1
             && self
                 .tail
-                .compare_exchange(from as i64, to as i64, Ordering::SeqCst, Ordering::Relaxed)
+                .compare_exchange(from, to, Ordering::SeqCst, Ordering::Relaxed)
                 .is_ok()
         {
             self.wait_strategy.notify();

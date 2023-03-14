@@ -26,16 +26,16 @@ where
         let claimed = self.nexus.producer_tracker.claim();
         debug_assert!(claimed >= 0);
 
-        if claimed >= (self.nexus.capacity as i64) {
-            let tail = claimed - (self.nexus.capacity as i64);
+        if claimed >= (self.nexus.length as i64) {
+            let tail = claimed - (self.nexus.length as i64);
             self.nexus.reader_tracker.wait_for_tail(tail + 1);
         }
 
-        let index = (claimed as usize) % self.nexus.capacity;
+        let index = (claimed as usize) % self.nexus.length;
 
         let mut old_value: Option<T> = None;
         unsafe {
-            if claimed < (self.nexus.capacity as i64) {
+            if claimed < (self.nexus.length as i64) {
                 core::ptr::copy_nonoverlapping(
                     &value,
                     (*self.nexus.buffer).get_unchecked_mut(index),

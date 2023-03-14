@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Receiver<T> {
-    cursor: usize,
+    cursor: i64,
     nexus: Arc<NexusQ<T>>,
 }
 
 impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         nexus.reader_tracker.register();
-        Self { cursor: 0, nexus }
+        Self { cursor: -1, nexus }
     }
 }
 
@@ -25,11 +25,16 @@ where
     T: Clone,
 {
     pub fn recv(&mut self) -> T {
-        self.nexus
-            .producer_tracker
-            .wait_for_publish(self.cursor as i64);
+        self.cursor += 1;
+        debug_assert!(self.cursor >= 0);
 
-        let index = self.cursor % self.nexus.capacity;
+        self.nexus.producer_tracker.wait_for_publish(self.cursor);
+
+        self.nexus
+            .reader_tracker
+            .update_position((self.cursor - 1).clamp(0, i64::MAX), self.cursor);
+
+        let index = (self.cursor as usize) % self.nexus.length;
 
         let value;
         unsafe {
@@ -39,11 +44,6 @@ where
                 panic!("index out of bounds doing a read!")
             }
         }
-
-        self.nexus
-            .reader_tracker
-            .update_position(self.cursor, self.cursor + 1);
-        self.cursor += 1;
 
         value
     }
