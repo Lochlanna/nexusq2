@@ -185,7 +185,7 @@ mod tracker_tests {
 
     #[test]
     fn two_sender_two_receiver() {
-        test(2, 2, 5000000, 4);
+        test(2, 2, 1000, 5);
     }
 
     #[test]

@@ -35,18 +35,12 @@ where
 
         let mut old_value: Option<T> = None;
         unsafe {
+            let cell = (*self.nexus.buffer).get_unchecked_mut(index);
             if claimed < (self.nexus.length as i64) {
-                core::ptr::copy_nonoverlapping(
-                    &value,
-                    (*self.nexus.buffer).get_unchecked_mut(index),
-                    1,
-                );
+                core::ptr::copy_nonoverlapping(&value, cell, 1);
                 std::mem::forget(value);
             } else {
-                old_value = Some(core::mem::replace(
-                    (*self.nexus.buffer).get_unchecked_mut(index),
-                    value,
-                ));
+                old_value = Some(core::mem::replace(cell, value));
             }
         }
 

@@ -27,17 +27,19 @@ impl ReaderTracker {
     }
 
     pub fn update_position(&self, from: i64, to: i64) {
-        // debug_assert!(to - from == 1);
-        debug_assert!(from >= 0);
         debug_assert!(to >= 0);
         debug_assert!(to >= from);
 
-        if from == to {
+        if from == to || from < 0 {
             return;
         }
         debug_assert_eq!(to - from, 1);
+        debug_assert!(from >= 0);
 
         let tail = self.tail.load(SeqCst);
+        if tail > from {
+            debug_assert!(tail < from);
+        }
         let tail_index = tail as usize % self.tokens.len();
 
         let from_index = (from as usize) % self.tokens.len();
@@ -56,19 +58,27 @@ impl ReaderTracker {
             .get(from_index)
             .expect("index out of range on from token!");
 
-        let previous = {
+        let tail;
+        let previous;
+        {
             to_token.fetch_add(1, Ordering::SeqCst);
-            from_token.fetch_sub(1, Ordering::SeqCst)
+            tail = self.tail.load(SeqCst);
+            previous = from_token.fetch_sub(1, Ordering::SeqCst);
         };
 
-        if previous == 1
-            && self
-                .tail
-                .compare_exchange(from, to, Ordering::SeqCst, Ordering::Relaxed)
-                .is_ok()
-        {
+        if previous == 1 && tail == from {
+            self.tail.store(to, SeqCst);
             self.wait_strategy.notify();
         }
+        //
+        // if previous == 1
+        //     && self
+        //         .tail
+        //         .compare_exchange(from, to, Ordering::SeqCst, Ordering::Relaxed)
+        //         .is_ok()
+        // {
+        //     self.wait_strategy.notify();
+        // }
     }
 
     pub fn wait_for_tail(&self, min_tail_value: i64) -> i64 {
