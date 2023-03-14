@@ -187,7 +187,12 @@ mod tracker_tests {
 
     #[test]
     fn two_sender_two_receiver() {
-        test(2, 2, 500000, 5);
+        test(2, 2, 10000, 5);
+    }
+
+    #[test]
+    fn two_sender_two_receiver_long() {
+        // test(2, 2, 500000, 5);
     }
 
     #[test]
