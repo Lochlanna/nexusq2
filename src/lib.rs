@@ -163,7 +163,9 @@ mod tracker_tests {
             .collect();
 
         results.iter().for_each(|result| {
-            println!("diff: {:?}", result);
+            if !result.is_empty() {
+                println!("diff: {:?}", result);
+            }
             assert!(result.is_empty())
         });
     }
@@ -185,7 +187,7 @@ mod tracker_tests {
 
     #[test]
     fn two_sender_two_receiver() {
-        test(2, 2, 1000, 5);
+        test(2, 2, 500000, 5);
     }
 
     #[test]
