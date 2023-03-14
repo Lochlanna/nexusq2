@@ -41,17 +41,16 @@ impl<T> NexusQ<T> {
     fn new(size: usize) -> Self {
         let mut buffer = Box::new(Vec::with_capacity(size));
         unsafe {
-            buffer.set_len(buffer.capacity());
+            buffer.set_len(size);
         }
-        let capacity = buffer.len();
 
         let buffer = Box::into_raw(buffer);
 
         Self {
-            length: capacity,
+            length: size,
             buffer,
             producer_tracker: Default::default(),
-            reader_tracker: ReaderTracker::new(capacity),
+            reader_tracker: ReaderTracker::new(size),
         }
     }
 }
@@ -186,7 +185,7 @@ mod tracker_tests {
 
     #[test]
     fn two_sender_two_receiver() {
-        test(2, 2, 5000000, 5);
+        test(2, 2, 5000000, 4);
     }
 
     #[test]

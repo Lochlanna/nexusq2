@@ -13,7 +13,7 @@ pub struct ProducerTracker {
 impl Default for ProducerTracker {
     fn default() -> Self {
         Self {
-            claimed: Default::default(),
+            claimed: AtomicI64::new(0),
             published: AtomicI64::new(-1),
             wait_strategy: Default::default(),
         }

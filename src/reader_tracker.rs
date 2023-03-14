@@ -16,7 +16,7 @@ impl ReaderTracker {
         tokens.resize_with(size, Default::default);
         Self {
             tokens,
-            tail: Default::default(),
+            tail: AtomicI64::new(0),
             wait_strategy: Default::default(),
         }
     }
@@ -30,24 +30,35 @@ impl ReaderTracker {
         // debug_assert!(to - from == 1);
         debug_assert!(from >= 0);
         debug_assert!(to >= 0);
+        debug_assert!(to >= from);
 
         if from == to {
             return;
         }
+        debug_assert_eq!(to - from, 1);
+
+        let tail = self.tail.load(SeqCst);
+        let tail_index = tail as usize % self.tokens.len();
 
         let from_index = (from as usize) % self.tokens.len();
         let to_index = (to as usize) % self.tokens.len();
 
-        if let Some(to_token) = self.tokens.get(to_index) {
-            to_token.fetch_add(1, Ordering::SeqCst);
-        } else {
-            panic!("index out of range on to token!");
+        if to_index == tail_index {
+            debug_assert_ne!(tail_index, to_index);
         }
 
-        let previous = if let Some(from_token) = self.tokens.get(from_index) {
+        let to_token = self
+            .tokens
+            .get(to_index)
+            .expect("index out of range on to token!");
+        let from_token = self
+            .tokens
+            .get(from_index)
+            .expect("index out of range on from token!");
+
+        let previous = {
+            to_token.fetch_add(1, Ordering::SeqCst);
             from_token.fetch_sub(1, Ordering::SeqCst)
-        } else {
-            panic!("index out of range on to token!");
         };
 
         if previous == 1
@@ -61,10 +72,11 @@ impl ReaderTracker {
     }
 
     pub fn wait_for_tail(&self, min_tail_value: i64) -> i64 {
+        // while self.tail.load(SeqCst) <
         let v = self
             .wait_strategy
             .wait_for_at_least(&self.tail, min_tail_value);
-        debug_assert!(self.tail.load(Ordering::Relaxed) >= min_tail_value);
+        debug_assert!(self.current_tail_position() >= min_tail_value);
         v
     }
 
