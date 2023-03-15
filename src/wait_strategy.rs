@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicI64, Ordering};
+use crate::sync::atomic::{AtomicI64, Ordering};
 
 pub trait WaitStrategy {
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType;
@@ -30,29 +30,40 @@ pub struct HybridWaitStrategy {
     event: event_listener::Event,
 }
 
+/// This function is for compatibility with loom which doesn't like full spins
+fn maybe_yield() {
+    #[cfg(loom)]
+    crate::thread::yield_now();
+}
+
 impl WaitStrategy for HybridWaitStrategy {
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
         loop {
             if let Some(v) = variable.at_least(min_value) {
                 return v;
             }
+            maybe_yield();
             core::hint::spin_loop()
         }
         // for _ in 0..self.num_spin {
-        //
-        // }
-        // for _ in 0..self.num_yield {
-        //     if let Some(v) = check(variable, expected) {
+        //     if let Some(v) = variable.at_least(min_value) {
         //         return v;
         //     }
-        //     std::thread::yield_now();
+        //     maybe_yield();
+        //     core::hint::spin_loop()
+        // }
+        // for _ in 0..self.num_yield {
+        //     if let Some(v) = variable.at_least(min_value) {
+        //         return v;
+        //     }
+        //     crate::thread::yield_now();
         // }
         // loop {
-        //     if let Some(v) = check(variable, expected) {
+        //     if let Some(v) = variable.at_least(min_value) {
         //         return v;
         //     }
         //     let listener = self.event.listen();
-        //     if let Some(v) = check(variable, expected) {
+        //     if let Some(v) = variable.at_least(min_value) {
         //         return v;
         //     }
         //     listener.wait();

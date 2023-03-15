@@ -1,7 +1,6 @@
+use crate::sync::atomic::{AtomicI64, Ordering};
 use crate::wait_strategy;
 use crate::wait_strategy::WaitStrategy;
-use std::sync::atomic::Ordering::SeqCst;
-use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct ProducerTracker {
@@ -42,6 +41,6 @@ impl ProducerTracker {
         v
     }
     pub fn current_published(&self) -> i64 {
-        self.published.load(SeqCst)
+        self.published.load(Ordering::SeqCst)
     }
 }

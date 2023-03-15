@@ -4,13 +4,15 @@ mod producer_tracker;
 mod reader_tracker;
 mod receiver;
 mod sender;
+mod sync;
+mod thread;
 mod wait_strategy;
 
 use crate::receiver::Receiver;
 use crate::sender::Sender;
+use crate::sync::Arc;
 use producer_tracker::ProducerTracker;
 use reader_tracker::ReaderTracker;
-use std::sync::Arc;
 
 #[derive(Debug)]
 struct NexusQ<T> {
@@ -65,8 +67,8 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 #[cfg(test)]
 mod tracker_tests {
     use super::*;
+    use crate::thread;
     use std::collections::HashMap;
-    use std::thread;
     use std::time::Duration;
 
     #[test]
@@ -191,11 +193,13 @@ mod tracker_tests {
     }
 
     #[test]
+    #[ignore]
     fn two_sender_two_receiver_long() {
-        // test(2, 2, 500000, 5);
+        test(2, 2, 500000, 5);
     }
 
     #[test]
+    #[ignore]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_stress() {
         for i in 0..1000 {

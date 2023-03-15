@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 event-listener = "2.5"
+
+[target.'cfg(loom)'.dependencies]
+loom = "0.5"

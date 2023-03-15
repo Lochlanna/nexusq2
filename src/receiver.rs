@@ -1,5 +1,5 @@
+use crate::sync::Arc;
 use crate::NexusQ;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Receiver<T> {

@@ -1,7 +1,6 @@
+use crate::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use crate::wait_strategy;
 use crate::wait_strategy::WaitStrategy;
-use std::sync::atomic::Ordering::SeqCst;
-use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 #[derive(Debug)]
 pub struct ReaderTracker {
@@ -36,7 +35,7 @@ impl ReaderTracker {
         debug_assert_eq!(to - from, 1);
         debug_assert!(from >= 0);
 
-        let tail = self.tail.load(SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
         if tail > from {
             debug_assert!(tail < from);
         }
@@ -62,12 +61,12 @@ impl ReaderTracker {
         let previous;
         {
             to_token.fetch_add(1, Ordering::SeqCst);
-            tail = self.tail.load(SeqCst);
+            tail = self.tail.load(Ordering::SeqCst);
             previous = from_token.fetch_sub(1, Ordering::SeqCst);
         };
 
         if previous == 1 && tail == from {
-            self.tail.store(to, SeqCst);
+            self.tail.store(to, Ordering::SeqCst);
             self.wait_strategy.notify();
         }
         //
@@ -91,6 +90,6 @@ impl ReaderTracker {
     }
 
     pub fn current_tail_position(&self) -> i64 {
-        self.tail.load(SeqCst)
+        self.tail.load(Ordering::SeqCst)
     }
 }
