@@ -6,8 +6,10 @@ mod reader_tracker;
 mod receiver;
 mod sender;
 mod sync;
-mod thread;
 mod wait_strategy;
+
+#[cfg(test)]
+mod thread;
 
 #[cfg(all(test, loom))]
 mod loom_tests;
