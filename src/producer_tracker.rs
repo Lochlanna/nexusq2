@@ -29,7 +29,7 @@ impl ProducerTracker {
             .compare_exchange_weak(value - 1, value, Ordering::SeqCst, Ordering::Relaxed)
             .is_err()
         {
-            core::hint::spin_loop();
+            crate::hint::spin_loop();
         }
         self.wait_strategy.notify()
     }

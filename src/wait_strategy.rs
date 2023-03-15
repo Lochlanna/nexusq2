@@ -43,14 +43,14 @@ impl WaitStrategy for HybridWaitStrategy {
                 return v;
             }
             maybe_yield();
-            core::hint::spin_loop()
+            crate::hint::spin_loop()
         }
         // for _ in 0..self.num_spin {
         //     if let Some(v) = variable.at_least(min_value) {
         //         return v;
         //     }
         //     maybe_yield();
-        //     core::hint::spin_loop()
+        //     crate::hint::spin_loop()
         // }
         // for _ in 0..self.num_yield {
         //     if let Some(v) = variable.at_least(min_value) {
