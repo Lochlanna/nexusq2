@@ -74,7 +74,7 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 }
 
 #[cfg(test)]
-mod tracker_tests {
+mod tests {
     use super::*;
     use crate::test_shared::*;
 
@@ -118,8 +118,20 @@ mod tracker_tests {
     }
 
     #[test]
+    #[ignore]
+    fn one_sender_one_receiver_long() {
+        test(1, 1, 50000000, 5);
+    }
+
+    #[test]
     fn one_sender_two_receiver() {
         test(1, 2, 100, 5);
+    }
+
+    #[test]
+    #[ignore]
+    fn one_sender_two_receiver_long() {
+        test(1, 2, 5000000, 5);
     }
 
     #[test]
@@ -129,11 +141,10 @@ mod tracker_tests {
 
     #[test]
     fn two_sender_two_receiver() {
-        test(2, 2, 10000, 5);
+        test(2, 2, 100, 5);
     }
 
     #[test]
-    #[ignore]
     fn two_sender_two_receiver_long() {
         test(2, 2, 500000, 5);
     }

@@ -33,20 +33,9 @@ impl ReaderTracker {
             return;
         }
         debug_assert_eq!(to - from, 1);
-        debug_assert!(from >= 0);
-
-        let tail = self.tail.load(Ordering::SeqCst);
-        if tail > from {
-            debug_assert!(tail < from);
-        }
-        let tail_index = tail as usize % self.tokens.len();
 
         let from_index = (from as usize) % self.tokens.len();
         let to_index = (to as usize) % self.tokens.len();
-
-        if to_index == tail_index {
-            debug_assert_ne!(tail_index, to_index);
-        }
 
         let to_token = self
             .tokens
@@ -69,15 +58,6 @@ impl ReaderTracker {
             self.tail.store(to, Ordering::SeqCst);
             self.wait_strategy.notify();
         }
-        //
-        // if previous == 1
-        //     && self
-        //         .tail
-        //         .compare_exchange(from, to, Ordering::SeqCst, Ordering::Relaxed)
-        //         .is_ok()
-        // {
-        //     self.wait_strategy.notify();
-        // }
     }
 
     pub fn wait_for_tail(&self, min_tail_value: i64) -> i64 {

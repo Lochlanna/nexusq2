@@ -10,7 +10,7 @@ pub struct Receiver<T> {
 impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         nexus.reader_tracker.register();
-        Self { cursor: 0, nexus }
+        Self { cursor: -1, nexus }
     }
 }
 
@@ -25,9 +25,14 @@ where
     T: Clone,
 {
     pub fn recv(&mut self) -> T {
+        self.cursor += 1;
         debug_assert!(self.cursor >= 0);
 
         self.nexus.producer_tracker.wait_for_publish(self.cursor);
+
+        self.nexus
+            .reader_tracker
+            .update_position(self.cursor - 1, self.cursor);
 
         let index = (self.cursor as usize) % self.nexus.length;
 
@@ -39,11 +44,6 @@ where
                 panic!("index out of bounds doing a read!")
             }
         }
-
-        self.nexus
-            .reader_tracker
-            .update_position(self.cursor - 1, self.cursor);
-        self.cursor += 1;
 
         value
     }

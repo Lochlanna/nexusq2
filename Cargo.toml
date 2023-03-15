@@ -9,4 +9,4 @@ edition = "2021"
 event-listener = "2.5"
 
 [target.'cfg(loom)'.dependencies]
-loom = "0.5"
+loom = {version = "0.5", features=["checkpoint"]}
