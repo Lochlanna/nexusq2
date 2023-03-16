@@ -14,7 +14,7 @@ impl Waitable for AtomicI64 {
     type BaseType = i64;
 
     fn at_least(&self, expected: Self::BaseType) -> Option<Self::BaseType> {
-        let current_value = self.load(Ordering::Acquire);
+        let current_value = self.load(Ordering::Relaxed);
         if current_value >= expected {
             Some(current_value)
         } else {
@@ -30,6 +30,16 @@ pub struct HybridWaitStrategy {
     event: event_listener::Event,
 }
 
+impl HybridWaitStrategy {
+    pub fn new(num_spin: u64, num_yield: u64) -> Self {
+        Self {
+            num_spin,
+            num_yield,
+            event: Default::default(),
+        }
+    }
+}
+
 /// This function is for compatibility with loom which doesn't like full spins
 fn maybe_yield() {
     #[cfg(loom)]
@@ -38,6 +48,13 @@ fn maybe_yield() {
 
 impl WaitStrategy for HybridWaitStrategy {
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
+        loop {
+            if let Some(v) = variable.at_least(min_value) {
+                return v;
+            }
+            maybe_yield();
+            crate::hint::spin_loop()
+        }
         for _ in 0..self.num_spin {
             if let Some(v) = variable.at_least(min_value) {
                 return v;

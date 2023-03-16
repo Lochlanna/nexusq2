@@ -37,14 +37,13 @@ impl ReaderTracker {
         let from_index = (from as usize) % self.tokens.len();
         let to_index = (to as usize) % self.tokens.len();
 
-        let to_token = self
-            .tokens
-            .get(to_index)
-            .expect("index out of range on to token!");
-        let from_token = self
-            .tokens
-            .get(from_index)
-            .expect("index out of range on from token!");
+        let to_token;
+        let from_token;
+
+        unsafe {
+            to_token = self.tokens.get_unchecked(to_index);
+            from_token = self.tokens.get_unchecked(from_index);
+        }
 
         to_token.fetch_add(1, Release);
         let previous = from_token.fetch_sub(1, AcqRel);
@@ -59,7 +58,6 @@ impl ReaderTracker {
     }
 
     pub fn wait_for_tail(&self, min_tail_value: i64) -> i64 {
-        // while self.tail.load(SeqCst) <
         let v = self
             .wait_strategy
             .wait_for_at_least(&self.tail, min_tail_value);
