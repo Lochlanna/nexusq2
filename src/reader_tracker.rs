@@ -1,4 +1,4 @@
-use crate::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
+use crate::sync::atomic::{AtomicI64, AtomicUsize, Ordering::*};
 use crate::wait_strategy;
 use crate::wait_strategy::WaitStrategy;
 
@@ -22,7 +22,7 @@ impl ReaderTracker {
 
     pub fn register(&self) {
         let token = self.tokens.get(0).expect("tokens was 0 sized");
-        token.fetch_add(1, Ordering::SeqCst);
+        token.fetch_add(1, SeqCst);
     }
 
     pub fn update_position(&self, from: i64, to: i64) {
@@ -46,16 +46,18 @@ impl ReaderTracker {
             .get(from_index)
             .expect("index out of range on from token!");
 
-        let tail;
+        let mut tail;
         let previous;
         {
-            to_token.fetch_add(1, Ordering::SeqCst);
-            tail = self.tail.load(Ordering::SeqCst);
-            previous = from_token.fetch_sub(1, Ordering::SeqCst);
+            to_token.fetch_add(1, SeqCst);
+            tail = self.tail.load(SeqCst);
+            previous = from_token.fetch_sub(1, SeqCst);
         };
 
+        tail = tail.max(self.tail.load(SeqCst));
+
         if previous == 1 && tail == from {
-            self.tail.store(to, Ordering::SeqCst);
+            self.tail.store(to, SeqCst);
             self.wait_strategy.notify();
         }
     }
@@ -70,6 +72,6 @@ impl ReaderTracker {
     }
 
     pub fn current_tail_position(&self) -> i64 {
-        self.tail.load(Ordering::SeqCst)
+        self.tail.load(SeqCst)
     }
 }
