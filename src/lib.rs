@@ -37,13 +37,11 @@ unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> Drop for NexusQ<T> {
     fn drop(&mut self) {
-        let current_length = self.producer_tracker.current_published() + 1;
+        let current_length = (self.producer_tracker.current_published() + 1) as usize;
         unsafe {
             // This ensures that drop is run correctly for all valid items in the buffer and also not run on uninitialised memory!
-            if current_length < 0 {
-                (*self.buffer).set_len(0);
-            } else if (current_length as usize) < self.length {
-                (*self.buffer).set_len(current_length as usize);
+            if current_length < self.length {
+                (*self.buffer).set_len(current_length);
             }
             drop(Box::from_raw(self.buffer));
         }

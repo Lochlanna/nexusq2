@@ -1,6 +1,8 @@
 // #[cfg(not(loom))]
 pub(crate) use std::sync::Arc;
+
 // #[cfg(not(loom))]
+#[allow(unused_imports)]
 pub(crate) use std::sync::Once;
 
 // #[cfg(loom)]
