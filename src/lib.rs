@@ -179,6 +179,7 @@ mod drop_tests {
     use crate::test_shared::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    #[derive(Debug, Clone)]
     struct CustomDropper {
         value: i64,
         counter: Arc<AtomicU64>,
@@ -227,5 +228,29 @@ mod drop_tests {
         setup_logging();
         let (sender, _) = make_channel::<CustomDropper>(10);
         drop(sender);
+    }
+
+    #[test]
+    fn valid_drop_overwrite() {
+        setup_logging();
+        let counter = Default::default();
+        let (sender, mut receiver) = make_channel::<CustomDropper>(3);
+        sender.send(CustomDropper::new(&counter));
+        sender.send(CustomDropper::new(&counter));
+        sender.send(CustomDropper::new(&counter));
+        receiver.recv();
+        receiver.recv();
+        receiver.recv();
+        assert_eq!(counter.load(Ordering::Relaxed), 3);
+        sender.send(CustomDropper::new(&counter));
+        assert_eq!(counter.load(Ordering::Relaxed), 4);
+        sender.send(CustomDropper::new(&counter));
+        assert_eq!(counter.load(Ordering::Relaxed), 5);
+        //TODO fix this so that it can be filled!
+        // sender.send(CustomDropper::new(&counter));
+        // assert_eq!(counter.load(Ordering::Relaxed), 6);
+        drop(sender);
+        drop(receiver);
+        assert_eq!(counter.load(Ordering::Relaxed), 8);
     }
 }
