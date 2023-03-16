@@ -1,6 +1,16 @@
 use super::*;
+use crate::sync::Once;
+use simple_logger::SimpleLogger;
 use std::collections::HashMap;
 use std::time::Duration;
+
+static START: Once = Once::new();
+
+pub fn setup_logging() {
+    START.call_once(|| {
+        SimpleLogger::new().init().unwrap();
+    });
+}
 
 pub(crate) fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
     let (sender, receiver) = make_channel(buffer_size);

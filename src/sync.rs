@@ -1,5 +1,7 @@
 // #[cfg(not(loom))]
 pub(crate) use std::sync::Arc;
+// #[cfg(not(loom))]
+pub(crate) use std::sync::Once;
 
 // #[cfg(loom)]
 // pub(crate) use loom::sync::Arc;

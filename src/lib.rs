@@ -79,10 +79,10 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 mod tests {
     use super::*;
     use crate::test_shared::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn basic_tracker_test() {
+        setup_logging();
         let nexus = NexusQ::<usize>::new(10);
         assert_eq!(nexus.producer_tracker.current_published(), -1);
         assert_eq!(nexus.producer_tracker.claim(), 0);
@@ -101,6 +101,7 @@ mod tests {
 
     #[test]
     fn basic_channel_test() {
+        setup_logging();
         let (sender, mut receiver) = make_channel(5);
 
         sender.send(1);
@@ -117,39 +118,46 @@ mod tests {
 
     #[test]
     fn one_sender_one_receiver() {
+        setup_logging();
         test(1, 1, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn one_sender_one_receiver_long() {
+        setup_logging();
         test(1, 1, 500000, 5);
     }
 
     #[test]
     fn one_sender_two_receiver() {
+        setup_logging();
         test(1, 2, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn one_sender_two_receiver_long() {
+        setup_logging();
         test(1, 2, 500000, 5);
     }
 
     #[test]
     fn two_sender_one_receiver() {
+        setup_logging();
         test(2, 1, 100, 5);
     }
 
     #[test]
     fn two_sender_two_receiver() {
+        setup_logging();
         test(2, 2, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_long() {
+        setup_logging();
         test(2, 2, 5000000, 5);
     }
 
@@ -157,6 +165,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_stress() {
+        setup_logging();
         for i in 0..1000 {
             println!("run {}", i);
             test(2, 2, 1000, 5);
@@ -191,6 +200,7 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_full_buffer() {
+        setup_logging();
         let counter = Default::default();
         let (sender, _) = make_channel(10);
         for _ in 0..=9 {
@@ -202,6 +212,7 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_partial_buffer() {
+        setup_logging();
         let counter = Default::default();
         let (sender, _) = make_channel(10);
         for _ in 0..=3 {
@@ -213,6 +224,7 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_empty_buffer() {
+        setup_logging();
         let (sender, _) = make_channel::<CustomDropper>(10);
         drop(sender);
     }
