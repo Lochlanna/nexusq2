@@ -14,7 +14,7 @@ impl Waitable for AtomicI64 {
     type BaseType = i64;
 
     fn at_least(&self, expected: Self::BaseType) -> Option<Self::BaseType> {
-        let current_value = self.load(Ordering::Relaxed);
+        let current_value = self.load(Ordering::Acquire);
         if current_value >= expected {
             Some(current_value)
         } else {

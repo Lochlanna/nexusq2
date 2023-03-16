@@ -24,7 +24,7 @@ impl ProducerTracker {
         self.claimed.fetch_add(1, Ordering::Relaxed)
     }
     pub fn publish(&self, value: i64) {
-        while self.published.load(Ordering::Relaxed) != value - 1 {
+        while self.published.load(Ordering::Acquire) != value - 1 {
             core::hint::spin_loop();
         }
         self.published.store(value, Ordering::Release);
