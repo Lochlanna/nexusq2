@@ -46,23 +46,15 @@ impl ReaderTracker {
             .get(from_index)
             .expect("index out of range on from token!");
 
-        let mut tail;
         let previous;
         {
             to_token.fetch_add(1, SeqCst);
-            tail = self.tail.load(SeqCst);
             previous = from_token.fetch_sub(1, SeqCst);
         };
 
         if previous == 1 {
-            let new_tail = self.tail.load(SeqCst);
-            if new_tail > tail {
-                tail = new_tail;
-                if from_token.load(SeqCst) > 0 {
-                    return;
-                }
-            }
-            if tail == from {
+            let tail = self.tail.load(SeqCst);
+            if tail == from && from_token.load(SeqCst) == 0 {
                 self.tail.store(to, SeqCst);
                 self.wait_strategy.notify();
             }
