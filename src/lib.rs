@@ -39,6 +39,7 @@ impl<T> Drop for NexusQ<T> {
     fn drop(&mut self) {
         let current = self.producer_tracker.current_published();
         unsafe {
+            // This ensures that drop is run correctly for all valid items in the buffer and also not run on uninitialised memory!
             if current < 0 {
                 (*self.buffer).set_len(0);
             } else if (current as usize) < self.length {
@@ -78,6 +79,7 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 mod tests {
     use super::*;
     use crate::test_shared::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn basic_tracker_test() {
@@ -159,5 +161,59 @@ mod tests {
             println!("run {}", i);
             test(2, 2, 1000, 5);
         }
+    }
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+    use crate::test_shared::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct CustomDropper {
+        value: i64,
+        counter: Arc<AtomicU64>,
+    }
+    impl CustomDropper {
+        fn new(counter: &Arc<AtomicU64>) -> Self {
+            Self {
+                value: 42424242,
+                counter: Arc::clone(counter),
+            }
+        }
+    }
+    impl Drop for CustomDropper {
+        fn drop(&mut self) {
+            assert_eq!(self.value, 42424242);
+            self.counter.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn valid_drop_full_buffer() {
+        let counter = Default::default();
+        let (sender, _) = make_channel(10);
+        for _ in 0..=9 {
+            sender.send(CustomDropper::new(&counter));
+        }
+        drop(sender);
+        assert_eq!(counter.load(Ordering::Relaxed), 9);
+    }
+
+    #[test]
+    fn valid_drop_partial_buffer() {
+        let counter = Default::default();
+        let (sender, _) = make_channel(10);
+        for _ in 0..=3 {
+            sender.send(CustomDropper::new(&counter));
+        }
+        drop(sender);
+        assert_eq!(counter.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn valid_drop_empty_buffer() {
+        let (sender, _) = make_channel::<CustomDropper>(10);
+        drop(sender);
     }
 }

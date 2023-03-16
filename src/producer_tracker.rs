@@ -21,16 +21,13 @@ impl Default for ProducerTracker {
 
 impl ProducerTracker {
     pub fn claim(&self) -> i64 {
-        self.claimed.fetch_add(1, Ordering::SeqCst)
+        self.claimed.fetch_add(1, Ordering::Relaxed)
     }
     pub fn publish(&self, value: i64) {
-        while self
-            .published
-            .compare_exchange_weak(value - 1, value, Ordering::SeqCst, Ordering::Relaxed)
-            .is_err()
-        {
+        while self.published.load(Ordering::Acquire) != value - 1 {
             crate::hint::spin_loop();
         }
+        self.published.store(value, Ordering::Release);
         self.wait_strategy.notify()
     }
     pub fn wait_for_publish(&self, min_published_value: i64) -> i64 {
@@ -41,6 +38,6 @@ impl ProducerTracker {
         v
     }
     pub fn current_published(&self) -> i64 {
-        self.published.load(Ordering::SeqCst)
+        self.published.load(Ordering::Acquire)
     }
 }
