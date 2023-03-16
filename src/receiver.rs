@@ -43,6 +43,9 @@ where
 
         let index = (self.cursor as usize).fast_mod(self.nexus.length);
 
-        unsafe { (*self.nexus.buffer).get_unchecked_mut(index).clone() }
+        unsafe {
+            let cell = self.nexus.buffer_raw.add(index);
+            (*cell).clone()
+        }
     }
 }

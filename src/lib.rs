@@ -53,7 +53,8 @@ impl FastMod for usize {
 #[derive(Debug)]
 struct NexusQ<T> {
     length: usize,
-    buffer: *mut Vec<T>,
+    buffer: Vec<T>,
+    buffer_raw: *mut T,
     producer_tracker: ProducerTracker,
     reader_tracker: ReaderTracker,
 }
@@ -67,26 +68,27 @@ impl<T> Drop for NexusQ<T> {
         unsafe {
             // This ensures that drop is run correctly for all valid items in the buffer and also not run on uninitialised memory!
             if current_length < self.length {
-                (*self.buffer).set_len(current_length);
+                self.buffer.set_len(current_length);
             }
-            drop(Box::from_raw(self.buffer));
         }
     }
 }
 
 impl<T> NexusQ<T> {
+    #[allow(clippy::uninit_vec)]
     fn new(size: usize) -> Self {
         let size = size.maybe_next_power_of_two();
-        let mut buffer = Box::new(Vec::with_capacity(size));
+        let mut buffer = Vec::with_capacity(size);
         unsafe {
             buffer.set_len(size);
         }
 
-        let buffer = Box::into_raw(buffer);
+        let buffer_raw = buffer.as_mut_ptr();
 
         Self {
             length: size,
             buffer,
+            buffer_raw,
             producer_tracker: Default::default(),
             reader_tracker: ReaderTracker::new(size),
         }
