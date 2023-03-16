@@ -36,7 +36,7 @@ pub(crate) fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_
         .collect();
     thread::sleep(Duration::from_secs_f64(0.01));
 
-    senders.into_iter().for_each(|sender| {
+    senders.into_iter().for_each(|mut sender| {
         thread::spawn(move || {
             for i in 0..num {
                 sender.send(i);

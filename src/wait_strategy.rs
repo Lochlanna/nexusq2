@@ -38,36 +38,29 @@ fn maybe_yield() {
 
 impl WaitStrategy for HybridWaitStrategy {
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
-        loop {
+        for _ in 0..self.num_spin {
             if let Some(v) = variable.at_least(min_value) {
                 return v;
             }
             maybe_yield();
             crate::hint::spin_loop()
         }
-        // for _ in 0..self.num_spin {
-        //     if let Some(v) = variable.at_least(min_value) {
-        //         return v;
-        //     }
-        //     maybe_yield();
-        //     crate::hint::spin_loop()
-        // }
-        // for _ in 0..self.num_yield {
-        //     if let Some(v) = variable.at_least(min_value) {
-        //         return v;
-        //     }
-        //     crate::thread::yield_now();
-        // }
-        // loop {
-        //     if let Some(v) = variable.at_least(min_value) {
-        //         return v;
-        //     }
-        //     let listener = self.event.listen();
-        //     if let Some(v) = variable.at_least(min_value) {
-        //         return v;
-        //     }
-        //     listener.wait();
-        // }
+        for _ in 0..self.num_yield {
+            if let Some(v) = variable.at_least(min_value) {
+                return v;
+            }
+            crate::thread::yield_now();
+        }
+        loop {
+            if let Some(v) = variable.at_least(min_value) {
+                return v;
+            }
+            let listener = self.event.listen();
+            if let Some(v) = variable.at_least(min_value) {
+                return v;
+            }
+            listener.wait();
+        }
     }
     fn notify(&self) {
         self.event.notify(usize::MAX);

@@ -4,11 +4,15 @@ use crate::NexusQ;
 #[derive(Debug)]
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
+    tail_cache: i64,
 }
 
 impl<T> Sender<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
-        Self { nexus }
+        Self {
+            nexus,
+            tail_cache: 0,
+        }
     }
 }
 
@@ -22,13 +26,15 @@ impl<T> Sender<T>
 where
     T: Send,
 {
-    pub fn send(&self, value: T) {
+    pub fn send(&mut self, value: T) {
         let claimed = self.nexus.producer_tracker.claim();
         debug_assert!(claimed >= 0);
 
         if claimed >= (self.nexus.length as i64) {
-            let tail = claimed - (self.nexus.length as i64);
-            self.nexus.reader_tracker.wait_for_tail(tail + 1);
+            let expected_tail = claimed - (self.nexus.length as i64) + 1;
+            if self.tail_cache < expected_tail {
+                self.tail_cache = self.nexus.reader_tracker.wait_for_tail(expected_tail);
+            }
         }
 
         let index = (claimed as usize) % self.nexus.length;

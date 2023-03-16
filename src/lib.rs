@@ -6,10 +6,8 @@ mod reader_tracker;
 mod receiver;
 mod sender;
 mod sync;
-mod wait_strategy;
-
-#[cfg(test)]
 mod thread;
+mod wait_strategy;
 
 #[cfg(all(test, loom))]
 mod loom_tests;
@@ -100,7 +98,7 @@ mod tests {
     #[test]
     fn basic_channel_test() {
         setup_logging();
-        let (sender, mut receiver) = make_channel(5);
+        let (mut sender, mut receiver) = make_channel(5);
 
         sender.send(1);
         sender.send(2);
@@ -160,7 +158,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_stress() {
         setup_logging();
@@ -201,7 +198,7 @@ mod drop_tests {
     fn valid_drop_full_buffer() {
         setup_logging();
         let counter = Default::default();
-        let (sender, _) = make_channel(10);
+        let (mut sender, _) = make_channel(10);
         for _ in 0..10 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -213,7 +210,7 @@ mod drop_tests {
     fn valid_drop_partial_buffer() {
         setup_logging();
         let counter = Default::default();
-        let (sender, _) = make_channel(10);
+        let (mut sender, _) = make_channel(10);
         for _ in 0..3 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -232,7 +229,7 @@ mod drop_tests {
     fn valid_drop_overwrite() {
         setup_logging();
         let counter = Default::default();
-        let (sender, mut receiver) = make_channel::<CustomDropper>(3);
+        let (mut sender, mut receiver) = make_channel::<CustomDropper>(3);
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));

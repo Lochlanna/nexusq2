@@ -5,12 +5,17 @@ use crate::NexusQ;
 pub struct Receiver<T> {
     cursor: i64,
     nexus: Arc<NexusQ<T>>,
+    published_cache: i64,
 }
 
 impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         nexus.reader_tracker.register();
-        Self { cursor: -1, nexus }
+        Self {
+            cursor: -1,
+            nexus,
+            published_cache: -1,
+        }
     }
 }
 
@@ -28,7 +33,9 @@ where
         self.cursor += 1;
         debug_assert!(self.cursor >= 0);
 
-        self.nexus.producer_tracker.wait_for_publish(self.cursor);
+        if self.cursor > self.published_cache {
+            self.published_cache = self.nexus.producer_tracker.wait_for_publish(self.cursor);
+        }
 
         self.nexus
             .reader_tracker
@@ -36,15 +43,6 @@ where
 
         let index = (self.cursor as usize) % self.nexus.length;
 
-        let value;
-        unsafe {
-            if let Some(cell) = (*self.nexus.buffer).get(index) {
-                value = cell.clone();
-            } else {
-                panic!("index out of bounds doing a read!")
-            }
-        }
-
-        value
+        unsafe { (*self.nexus.buffer).get_unchecked_mut(index).clone() }
     }
 }
