@@ -17,11 +17,12 @@ mod loom_tests;
 #[cfg(test)]
 mod test_shared;
 
-use crate::receiver::Receiver;
-use crate::sender::Sender;
 use crate::sync::Arc;
 use producer_tracker::ProducerTracker;
 use reader_tracker::ReaderTracker;
+
+pub use receiver::Receiver;
+pub use sender::Sender;
 
 #[derive(Debug)]
 struct NexusQ<T> {
@@ -118,9 +119,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[cfg_attr(miri, ignore)]
     fn one_sender_one_receiver_long() {
-        test(1, 1, 50000000, 5);
+        test(1, 1, 500000, 5);
     }
 
     #[test]
@@ -129,9 +130,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[cfg_attr(miri, ignore)]
     fn one_sender_two_receiver_long() {
-        test(1, 2, 5000000, 5);
+        test(1, 2, 500000, 5);
     }
 
     #[test]
@@ -145,6 +146,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_long() {
         test(2, 2, 500000, 5);
     }
