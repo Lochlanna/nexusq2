@@ -108,25 +108,6 @@ mod tests {
     use crate::test_shared::*;
 
     #[test]
-    fn basic_tracker_test() {
-        setup_logging();
-        let nexus = NexusQ::<usize>::new(10);
-        assert_eq!(nexus.producer_tracker.current_published(), -1);
-        assert_eq!(nexus.producer_tracker.claim(), 0);
-        nexus.producer_tracker.publish(0);
-        assert_eq!(nexus.producer_tracker.current_published(), 0);
-        nexus.producer_tracker.publish(1);
-        assert_eq!(nexus.producer_tracker.current_published(), 1);
-
-        assert_eq!(nexus.reader_tracker.current_tail_position(), 0);
-        nexus.reader_tracker.register();
-        nexus.reader_tracker.update_position(0, 1);
-        assert_eq!(nexus.reader_tracker.current_tail_position(), 1);
-        nexus.reader_tracker.update_position(1, 2);
-        assert_eq!(nexus.reader_tracker.current_tail_position(), 2);
-    }
-
-    #[test]
     fn basic_channel_test() {
         setup_logging();
         let (mut sender, mut receiver) = make_channel(5);

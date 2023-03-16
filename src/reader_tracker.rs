@@ -69,3 +69,45 @@ impl ReaderTracker {
         self.tail.load(Acquire)
     }
 }
+
+#[cfg(test)]
+mod reader_tracker_tests {
+    use super::*;
+    use crate::test_shared::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn basic_test() {
+        setup_logging();
+        let reader_tracker = ReaderTracker::new(8);
+        assert_eq!(reader_tracker.current_tail_position(), 0);
+        for token in &reader_tracker.tokens {
+            assert_eq!(token.load(Ordering::SeqCst), 0);
+        }
+
+        reader_tracker.register();
+        let cursor_pos = reader_tracker.tokens.get(0).expect("couldn't get cursor!");
+        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+
+        reader_tracker.update_position(0, 1);
+        assert_eq!(reader_tracker.current_tail_position(), 1);
+        assert_eq!(cursor_pos.load(Ordering::SeqCst), 0);
+        let cursor_pos = reader_tracker.tokens.get(1).expect("couldn't get cursor!");
+        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+
+        reader_tracker.update_position(1, 2);
+        assert_eq!(reader_tracker.current_tail_position(), 2);
+
+        //test wrapping
+        for i in 2..15 {
+            reader_tracker.update_position(i, i + 1);
+        }
+
+        assert_eq!(reader_tracker.current_tail_position(), 15);
+        let cursor_pos = reader_tracker
+            .tokens
+            .get(15 % 8)
+            .expect("couldn't get cursor!");
+        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+    }
+}

@@ -41,3 +41,21 @@ impl ProducerTracker {
         self.published.load(Ordering::Acquire)
     }
 }
+
+#[cfg(test)]
+mod producer_tracker_tests {
+    use super::*;
+    use crate::test_shared::*;
+
+    #[test]
+    fn basic_test() {
+        setup_logging();
+        let producer_tracker = ProducerTracker::default();
+        assert_eq!(producer_tracker.current_published(), -1);
+        assert_eq!(producer_tracker.claim(), 0);
+        producer_tracker.publish(0);
+        assert_eq!(producer_tracker.current_published(), 0);
+        producer_tracker.publish(1);
+        assert_eq!(producer_tracker.current_published(), 1);
+    }
+}
