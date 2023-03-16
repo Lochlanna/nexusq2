@@ -148,7 +148,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_long() {
-        test(2, 2, 500000, 5);
+        test(2, 2, 5000000, 5);
     }
 
     #[test]

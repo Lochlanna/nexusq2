@@ -54,11 +54,18 @@ impl ReaderTracker {
             previous = from_token.fetch_sub(1, SeqCst);
         };
 
-        tail = tail.max(self.tail.load(SeqCst));
-
-        if previous == 1 && tail == from {
-            self.tail.store(to, SeqCst);
-            self.wait_strategy.notify();
+        if previous == 1 {
+            let new_tail = self.tail.load(SeqCst);
+            if new_tail > tail {
+                tail = new_tail;
+                if from_token.load(SeqCst) > 0 {
+                    return;
+                }
+            }
+            if tail == from {
+                self.tail.store(to, SeqCst);
+                self.wait_strategy.notify();
+            }
         }
     }
 
