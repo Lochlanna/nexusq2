@@ -1,5 +1,5 @@
-use crate::sync::Arc;
-use crate::NexusQ;
+use crate::{FastMod, NexusQ};
+use alloc::sync::Arc;
 
 #[derive(Debug)]
 pub struct Sender<T> {
@@ -37,7 +37,7 @@ where
             }
         }
 
-        let index = (claimed as usize) % self.nexus.length;
+        let index = (claimed as usize).fast_mod(self.nexus.length);
 
         let mut old_value: Option<T> = None;
         unsafe {

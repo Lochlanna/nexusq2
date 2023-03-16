@@ -1,27 +1,54 @@
 #![allow(dead_code)]
 
-mod hint;
+extern crate alloc;
+
 mod producer_tracker;
 mod reader_tracker;
 mod receiver;
 mod sender;
-mod sync;
-mod thread;
 mod wait_strategy;
 
 #[cfg(test)]
 mod bench_test;
-#[cfg(all(test, loom))]
-mod loom_tests;
+
 #[cfg(test)]
 mod test_shared;
 
-use crate::sync::Arc;
+use alloc::sync::Arc;
 use producer_tracker::ProducerTracker;
 use reader_tracker::ReaderTracker;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
+
+pub trait FastMod {
+    fn fast_mod(&self, denominator: Self) -> Self;
+    fn maybe_next_power_of_two(&self) -> Self;
+}
+
+impl FastMod for usize {
+    #[cfg(feature = "fast-mod")]
+    fn fast_mod(&self, denominator: Self) -> Self {
+        debug_assert!(denominator > 0);
+        debug_assert!(denominator.is_power_of_two());
+        *self & (denominator - 1)
+    }
+
+    #[cfg(not(feature = "fast-mod"))]
+    fn fast_mod(&self, denominator: Self) -> Self {
+        *self % denominator
+    }
+
+    #[cfg(feature = "fast-mod")]
+    fn maybe_next_power_of_two(&self) -> Self {
+        self.next_power_of_two()
+    }
+
+    #[cfg(not(feature = "fast-mod"))]
+    fn maybe_next_power_of_two(&self) -> Self {
+        *self
+    }
+}
 
 #[derive(Debug)]
 struct NexusQ<T> {
@@ -49,6 +76,7 @@ impl<T> Drop for NexusQ<T> {
 
 impl<T> NexusQ<T> {
     fn new(size: usize) -> Self {
+        let size = size.maybe_next_power_of_two();
         let mut buffer = Box::new(Vec::with_capacity(size));
         unsafe {
             buffer.set_len(size);
@@ -155,7 +183,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_long() {
         setup_logging();
-        for _ in 0..1000 {}
+        test(2, 2, 10000, 5);
     }
 
     #[test]
@@ -216,7 +244,7 @@ mod drop_tests {
             sender.send(CustomDropper::new(&counter));
         }
         drop(sender);
-        assert_eq!(counter.load(Ordering::Relaxed), 3);
+        assert_eq!(counter.load(Ordering::Acquire), 3);
     }
 
     #[test]
@@ -230,23 +258,46 @@ mod drop_tests {
     fn valid_drop_overwrite() {
         setup_logging();
         let counter = Default::default();
-        let (mut sender, mut receiver) = make_channel::<CustomDropper>(3);
+        let (mut sender, mut receiver) = make_channel::<CustomDropper>(4);
+        sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         receiver.recv();
         receiver.recv();
         receiver.recv();
-        assert_eq!(counter.load(Ordering::Relaxed), 3);
+        receiver.recv();
+        assert_eq!(counter.load(Ordering::Acquire), 4);
         sender.send(CustomDropper::new(&counter));
-        assert_eq!(counter.load(Ordering::Relaxed), 4);
+        assert_eq!(counter.load(Ordering::Acquire), 5);
         sender.send(CustomDropper::new(&counter));
-        assert_eq!(counter.load(Ordering::Relaxed), 5);
+        assert_eq!(counter.load(Ordering::Acquire), 6);
+        sender.send(CustomDropper::new(&counter));
+        assert_eq!(counter.load(Ordering::Acquire), 7);
         //TODO fix this so that it can be filled!
         // sender.send(CustomDropper::new(&counter));
-        // assert_eq!(counter.load(Ordering::Relaxed), 6);
+        // assert_eq!(counter.load(Ordering::Relaxed), 8);
         drop(sender);
         drop(receiver);
-        assert_eq!(counter.load(Ordering::Relaxed), 8);
+        assert_eq!(counter.load(Ordering::Acquire), 11);
+    }
+}
+
+#[cfg(test)]
+mod fast_mod_tests {
+    use super::*;
+
+    #[test]
+    fn test_fast_mod() {
+        for n in 0..1024 {
+            let mut d = 1_usize;
+            while d <= 1024_usize.next_power_of_two() {
+                d = d.next_power_of_two();
+                let expected = n % d;
+                let fast_mod = n.fast_mod(d);
+                assert_eq!(expected, fast_mod);
+                d += 1;
+            }
+        }
     }
 }

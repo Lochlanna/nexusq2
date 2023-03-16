@@ -1,6 +1,6 @@
-use crate::sync::atomic::{AtomicI64, AtomicUsize, Ordering::*};
-use crate::wait_strategy;
 use crate::wait_strategy::WaitStrategy;
+use crate::{wait_strategy, FastMod};
+use core::sync::atomic::{AtomicI64, AtomicUsize, Ordering::*};
 
 #[derive(Debug)]
 pub struct ReaderTracker {
@@ -34,8 +34,8 @@ impl ReaderTracker {
         }
         debug_assert_eq!(to - from, 1);
 
-        let from_index = (from as usize) % self.tokens.len();
-        let to_index = (to as usize) % self.tokens.len();
+        let from_index = (from as usize).fast_mod(self.tokens.len());
+        let to_index = (to as usize).fast_mod(self.tokens.len());
 
         let to_token;
         let from_token;

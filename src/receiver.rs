@@ -1,5 +1,5 @@
-use crate::sync::Arc;
-use crate::NexusQ;
+use crate::{FastMod, NexusQ};
+use alloc::sync::Arc;
 
 #[derive(Debug)]
 pub struct Receiver<T> {
@@ -41,7 +41,7 @@ where
             .reader_tracker
             .update_position(self.cursor - 1, self.cursor);
 
-        let index = (self.cursor as usize) % self.nexus.length;
+        let index = (self.cursor as usize).fast_mod(self.nexus.length);
 
         unsafe { (*self.nexus.buffer).get_unchecked_mut(index).clone() }
     }

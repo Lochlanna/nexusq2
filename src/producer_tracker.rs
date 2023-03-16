@@ -1,6 +1,6 @@
-use crate::sync::atomic::{AtomicI64, Ordering};
 use crate::wait_strategy;
 use crate::wait_strategy::WaitStrategy;
+use core::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct ProducerTracker {
@@ -25,7 +25,7 @@ impl ProducerTracker {
     }
     pub fn publish(&self, value: i64) {
         while self.published.load(Ordering::Relaxed) != value - 1 {
-            crate::hint::spin_loop();
+            core::hint::spin_loop();
         }
         self.published.store(value, Ordering::Release);
         self.wait_strategy.notify()
