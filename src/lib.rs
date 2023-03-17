@@ -22,7 +22,7 @@ mod wait_strategy;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use producer_tracker::ProducerTracker;
-use reader_tracker::ReaderTracker;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 pub use receiver::Receiver;
 pub use sender::Sender;
@@ -58,11 +58,88 @@ impl FastMod for usize {
 }
 
 #[derive(Debug)]
+struct Cell<T> {
+    value: T,
+    counter: AtomicI64,
+}
+
+impl<T> Default for Cell<T> {
+    #[allow(clippy::uninit_assumed_init)]
+    fn default() -> Self {
+        unsafe {
+            Self {
+                value: core::mem::MaybeUninit::zeroed().assume_init(),
+                counter: AtomicI64::new(-1),
+            }
+        }
+    }
+}
+
+impl<T> Cell<T> {
+    fn take_cell_for_write(&self) {
+        debug_assert!(self.counter.load(Ordering::Acquire) >= 0);
+        while self
+            .counter
+            .compare_exchange_weak(0, -1, Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            core::hint::spin_loop();
+        }
+    }
+
+    fn try_take_cell_for_write(&self) -> bool {
+        debug_assert!(self.counter.load(Ordering::Acquire) >= 0);
+        self.counter
+            .compare_exchange(0, -1, Ordering::AcqRel, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    pub fn publish_cell(&self) {
+        debug_assert_eq!(self.counter.load(Ordering::Acquire), -1);
+        self.counter.store(0, Ordering::Release);
+    }
+
+    pub fn move_to(&self) {
+        while self.counter.load(Ordering::Acquire) < 0 {
+            core::hint::spin_loop();
+        }
+        debug_assert!(self.counter.load(Ordering::Acquire) >= 0);
+        self.counter.fetch_add(1, Ordering::Release);
+    }
+
+    pub fn move_from(&self) {
+        debug_assert!(self.counter.load(Ordering::Acquire) > 0);
+        self.counter.fetch_sub(1, Ordering::Release);
+    }
+
+    pub unsafe fn replace(&mut self, value: T) {
+        self.take_cell_for_write();
+        let old = core::ptr::replace(&mut self.value, value);
+        self.publish_cell();
+        drop(old);
+    }
+
+    pub unsafe fn try_replace(&mut self, value: T) -> bool {
+        if !self.try_take_cell_for_write() {
+            return false;
+        }
+        let old = core::ptr::replace(&mut self.value, value);
+        self.publish_cell();
+        drop(old);
+        true
+    }
+
+    pub unsafe fn write(&mut self, value: T) {
+        core::ptr::write(&mut self.value, value);
+        self.publish_cell();
+    }
+}
+
+#[derive(Debug)]
 struct NexusQ<T> {
-    buffer: Vec<T>,
-    buffer_raw: *mut T,
+    buffer: Vec<Cell<T>>,
+    buffer_raw: *mut Cell<T>,
     producer_tracker: ProducerTracker,
-    reader_tracker: ReaderTracker,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -85,9 +162,7 @@ impl<T> NexusQ<T> {
     fn new(size: usize) -> Self {
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
-        unsafe {
-            buffer.set_len(size);
-        }
+        buffer.resize_with(size, Cell::default);
 
         let buffer_raw = buffer.as_mut_ptr();
 
@@ -95,7 +170,6 @@ impl<T> NexusQ<T> {
             buffer,
             buffer_raw,
             producer_tracker: ProducerTracker::default(),
-            reader_tracker: ReaderTracker::new(size),
         }
     }
 }
@@ -126,6 +200,19 @@ mod tests {
         assert_eq!(receiver.recv(), 3);
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
+    }
+
+    #[test]
+    fn cant_overwrite() {
+        let (mut sender, mut receiver) = make_channel(5);
+        sender.send(1);
+        sender.send(2);
+        sender.send(3);
+        sender.send(4);
+        sender.send(5);
+        assert_eq!(receiver.recv(), 1);
+        sender.send(6);
+        assert!(!sender.try_send(7));
     }
 }
 

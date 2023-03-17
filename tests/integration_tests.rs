@@ -1,4 +1,7 @@
 mod test_shared;
+
+use nexusq2::make_channel;
+use std::time::{Duration, Instant};
 use test_shared::test;
 
 #[test]
@@ -37,6 +40,30 @@ fn two_sender_two_receiver() {
 // #[cfg_attr(miri, ignore)]
 fn two_sender_two_receiver_long() {
     test(2, 2, 1000, 5);
+}
+
+#[test]
+#[ignore]
+fn latency() {
+    let mut total_duration = Duration::from_nanos(0);
+    let (mut sender, mut receiver) = make_channel(100);
+    for _ in 0..200 {
+        sender.send(Instant::now());
+        total_duration += receiver.recv().elapsed();
+    }
+    println!("that took, {}", total_duration.as_nanos() / 80);
+}
+
+#[test]
+#[ignore]
+fn mq2_latency() {
+    let mut total_duration = Duration::from_nanos(0);
+    let (sender, receiver) = multiqueue2::broadcast_queue(100);
+    for _ in 0..200 {
+        sender.try_send(Instant::now()).unwrap();
+        total_duration += receiver.recv().unwrap().elapsed();
+    }
+    println!("that took, {}", total_duration.as_nanos() / 80);
 }
 
 #[test]

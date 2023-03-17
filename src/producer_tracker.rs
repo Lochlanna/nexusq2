@@ -23,21 +23,8 @@ impl ProducerTracker {
         self.claimed.fetch_add(1, Ordering::Relaxed)
     }
     pub fn publish(&self, value: i64) {
-        while self
-            .published
-            .compare_exchange_weak(value - 1, value, Ordering::Release, Ordering::Relaxed)
-            .is_err()
-        {
-            core::hint::spin_loop();
-        }
-        self.wait_strategy.notify(value);
-    }
-    pub fn wait_for_publish(&self, min_published_value: i64) -> i64 {
-        let v = self
-            .wait_strategy
-            .wait_for_at_least(&self.published, min_published_value);
-        debug_assert!(self.published.load(Ordering::Relaxed) >= min_published_value);
-        v
+        debug_assert_eq!(self.published.load(Ordering::Acquire), value - 1);
+        self.published.store(value, Ordering::Release);
     }
     pub fn current_published(&self) -> i64 {
         self.published.load(Ordering::Acquire)
