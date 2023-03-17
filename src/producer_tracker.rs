@@ -23,10 +23,13 @@ impl ProducerTracker {
         self.claimed.fetch_add(1, Ordering::Relaxed)
     }
     pub fn publish(&self, value: i64) {
-        while self.published.load(Ordering::Acquire) != value - 1 {
+        while self
+            .published
+            .compare_exchange_weak(value - 1, value, Ordering::Release, Ordering::Relaxed)
+            .is_err()
+        {
             core::hint::spin_loop();
         }
-        self.published.store(value, Ordering::Release);
         self.wait_strategy.notify();
     }
     pub fn wait_for_publish(&self, min_published_value: i64) -> i64 {

@@ -57,7 +57,7 @@ impl WaitStrategy for Hybrid {
             if let Some(v) = variable.at_least(min_value) {
                 return v;
             }
-            core::hint::spin_loop()
+            core::hint::spin_loop();
         }
     }
     #[cfg(feature = "std")]
