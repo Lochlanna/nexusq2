@@ -40,12 +40,13 @@ impl Hybrid {
             }
             core::hint::spin_loop();
         }
-        // for _ in 0..self.num_yield {
-        //     if let Some(v) = variable.at_least(min_value) {
-        //         return v;
-        //     }
-        //     std::thread::yield_now();
-        // }
+        for _ in 0..self.num_yield {
+            current_value = variable.load(Acquire);
+            if current_value >= min_value {
+                return current_value;
+            }
+            std::thread::yield_now();
+        }
 
         let mut current_value = variable.load(Acquire);
         if current_value >= min_value {
