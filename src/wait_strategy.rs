@@ -32,8 +32,9 @@ impl Hybrid {
     }
     #[cfg(feature = "std")]
     pub fn wait_for_at_least(&self, variable: &AtomicI64, min_value: i64) -> i64 {
+        let mut current_value;
         for _ in 0..self.num_spin {
-            let current_value = variable.load(Acquire);
+            current_value = variable.load(Acquire);
             if current_value >= min_value {
                 return current_value;
             }
@@ -45,13 +46,18 @@ impl Hybrid {
         //     }
         //     std::thread::yield_now();
         // }
-        {
-            let mut guard = self.lock.lock();
-            self.event
-                .wait_while(&mut guard, |current_value| *current_value < min_value);
+
+        let mut current_value = variable.load(Acquire);
+        if current_value >= min_value {
+            return current_value;
         }
-        // This load is required for memory ordering reasons...
-        variable.load(Acquire)
+        let mut guard = self.lock.lock();
+        self.event.wait_while(&mut guard, |_| {
+            current_value = variable.load(Acquire);
+            current_value < min_value
+        });
+
+        current_value
     }
     pub fn notify(&self, value: i64) {
         let mut guard = self.lock.lock();
