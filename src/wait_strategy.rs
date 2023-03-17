@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicI64, Ordering};
+use core::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering::Acquire;
 
 #[derive(Debug)]

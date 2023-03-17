@@ -54,27 +54,25 @@ where
         let claimed = (*self.producer_tracker).claim();
         debug_assert!(claimed >= 0);
 
-        if claimed >= self.buffer_length {
+        let index = (claimed as usize).fast_mod(self.buffer_length_unsigned);
+
+        let should_drop: bool = claimed >= self.buffer_length;
+
+        let cell = self.buffer_raw.add(index);
+
+        if should_drop {
             let expected_tail = claimed - self.buffer_length + 1;
             if self.tail_cache < expected_tail {
                 self.tail_cache = (*self.reader_tracker).wait_for_tail(expected_tail);
             }
+            let old = core::ptr::read(cell);
+            core::ptr::write(cell, value);
+            (*self.producer_tracker).publish(claimed);
+            drop(old);
+            return;
         }
 
-        let index = (claimed as usize).fast_mod(self.buffer_length_unsigned);
-
-        let mut old_value: Option<T> = None;
-        let cell = self.buffer_raw.add(index);
-        if claimed < self.buffer_length {
-            cell.write(value);
-        } else {
-            old_value = Some(cell.replace(value));
-        }
-
-        // Notify other threads that a value has been written
+        core::ptr::write(cell, value);
         (*self.producer_tracker).publish(claimed);
-
-        // This will ensure that the compiler doesn't do this earlier for some reason (it probably wouldn't anyway)
-        drop(old_value);
     }
 }

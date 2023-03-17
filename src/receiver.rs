@@ -51,14 +51,13 @@ where
     unsafe fn unsafe_recv(&mut self) -> T {
         self.cursor += 1;
         debug_assert!(self.cursor >= 0);
+        let index = (self.cursor as usize).fast_mod(self.buffer_length);
 
         if self.cursor > self.published_cache {
             self.published_cache = (*self.producer_tracker).wait_for_publish(self.cursor);
         }
 
         (*self.reader_tracker).update_position(self.cursor - 1, self.cursor);
-
-        let index = (self.cursor as usize).fast_mod(self.buffer_length);
 
         unsafe {
             let cell = self.buffer_raw.add(index);
