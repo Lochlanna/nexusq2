@@ -1,4 +1,6 @@
-use super::*;
+use crate::make_channel;
+use crate::Receiver;
+use crate::Sender;
 use simple_logger::SimpleLogger;
 use std::collections::HashMap;
 use std::sync::Once;
@@ -7,13 +9,13 @@ use std::time::Duration;
 
 static START: Once = Once::new();
 
-pub fn setup_logging() {
+pub fn setup_tests() {
     START.call_once(|| {
         SimpleLogger::new().init().unwrap();
     });
 }
 
-pub(crate) fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
+pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
     advanced_test(
         num_senders,
         num_receivers,
@@ -25,7 +27,7 @@ pub(crate) fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_
     );
 }
 
-pub(crate) fn advanced_test(
+pub fn advanced_test(
     num_senders: usize,
     num_receivers: usize,
     num: usize,
@@ -52,11 +54,11 @@ pub(crate) fn advanced_test(
         .collect();
     thread::sleep(Duration::from_secs_f64(0.01));
 
-    senders.into_iter().for_each(|sender| {
+    for sender in senders {
         thread::spawn(move || {
             sender_thread(num, sender_lag, average_jitter, sender);
         });
-    });
+    }
 
     let mut expected_map = HashMap::with_capacity(num);
     expected_map.extend((0..num).map(|i| (i, num_senders)));
@@ -70,17 +72,17 @@ pub(crate) fn advanced_test(
                 let e = count_map.entry(v).or_default();
                 *e += 1;
             }
-            count_map.retain(|k, v| expected_map.get(k).map(|ev| *v != *ev).unwrap_or(true));
+            count_map.retain(|k, v| expected_map.get(k).map_or(true, |ev| *v != *ev));
             count_map
         })
         .collect();
 
-    results.iter().for_each(|result| {
+    for result in &results {
         if !result.is_empty() {
-            println!("diff: {:?}", result);
+            println!("diff: {result:?}");
         }
-        assert!(result.is_empty())
-    });
+        assert!(result.is_empty());
+    }
 }
 
 fn sender_thread(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: Sender<usize>) {

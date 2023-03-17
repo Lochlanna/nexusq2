@@ -1,12 +1,16 @@
-use crate::wait_strategy::WaitStrategy;
-use crate::{wait_strategy, FastMod};
-use core::sync::atomic::{AtomicI64, AtomicUsize, Ordering::*};
+use crate::wait_strategy::{Hybrid, WaitStrategy};
+use crate::FastMod;
+use alloc::vec::Vec;
+use core::sync::atomic::{
+    AtomicI64, AtomicUsize,
+    Ordering::{AcqRel, Acquire, Release, SeqCst},
+};
 
 #[derive(Debug)]
 pub struct ReaderTracker {
     tokens: Vec<AtomicUsize>,
     tail: AtomicI64,
-    wait_strategy: wait_strategy::HybridWaitStrategy,
+    wait_strategy: Hybrid,
 }
 
 impl ReaderTracker {
@@ -16,7 +20,7 @@ impl ReaderTracker {
         Self {
             tokens,
             tail: AtomicI64::new(0),
-            wait_strategy: Default::default(),
+            wait_strategy: Hybrid::default(),
         }
     }
 
@@ -28,6 +32,7 @@ impl ReaderTracker {
     pub fn update_position(&self, from: i64, to: i64) {
         debug_assert!(to >= 0);
         debug_assert!(to >= from);
+        debug_assert!(from >= -1);
 
         if from == to || from < 0 {
             return;
@@ -73,27 +78,26 @@ impl ReaderTracker {
 #[cfg(test)]
 mod reader_tracker_tests {
     use super::*;
-    use crate::test_shared::*;
-    use std::sync::atomic::Ordering;
+    use crate::test_shared::setup_tests;
 
     #[test]
     fn basic_test() {
-        setup_logging();
+        setup_tests();
         let reader_tracker = ReaderTracker::new(8);
         assert_eq!(reader_tracker.current_tail_position(), 0);
         for token in &reader_tracker.tokens {
-            assert_eq!(token.load(Ordering::SeqCst), 0);
+            assert_eq!(token.load(SeqCst), 0);
         }
 
         reader_tracker.register();
         let cursor_pos = reader_tracker.tokens.get(0).expect("couldn't get cursor!");
-        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+        assert_eq!(cursor_pos.load(SeqCst), 1);
 
         reader_tracker.update_position(0, 1);
         assert_eq!(reader_tracker.current_tail_position(), 1);
-        assert_eq!(cursor_pos.load(Ordering::SeqCst), 0);
+        assert_eq!(cursor_pos.load(SeqCst), 0);
         let cursor_pos = reader_tracker.tokens.get(1).expect("couldn't get cursor!");
-        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+        assert_eq!(cursor_pos.load(SeqCst), 1);
 
         reader_tracker.update_position(1, 2);
         assert_eq!(reader_tracker.current_tail_position(), 2);
@@ -108,6 +112,6 @@ mod reader_tracker_tests {
             .tokens
             .get(15 % 8)
             .expect("couldn't get cursor!");
-        assert_eq!(cursor_pos.load(Ordering::SeqCst), 1);
+        assert_eq!(cursor_pos.load(SeqCst), 1);
     }
 }

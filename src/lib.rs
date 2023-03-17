@@ -1,6 +1,15 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(dead_code)]
+#![warn(future_incompatible)]
+#![deny(clippy::all)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![warn(clippy::cargo)]
 
 extern crate alloc;
+
+#[cfg(feature = "std")]
+extern crate std;
 
 mod producer_tracker;
 mod reader_tracker;
@@ -8,13 +17,14 @@ mod receiver;
 mod sender;
 mod wait_strategy;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod bench_test;
 
 #[cfg(test)]
 mod test_shared;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use producer_tracker::ProducerTracker;
 use reader_tracker::ReaderTracker;
 
@@ -22,29 +32,30 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 
 pub trait FastMod {
+    #[must_use]
     fn fast_mod(&self, denominator: Self) -> Self;
+    #[must_use]
     fn maybe_next_power_of_two(&self) -> Self;
 }
 
+#[cfg(feature = "fast-mod")]
 impl FastMod for usize {
-    #[cfg(feature = "fast-mod")]
     fn fast_mod(&self, denominator: Self) -> Self {
         debug_assert!(denominator > 0);
         debug_assert!(denominator.is_power_of_two());
         *self & (denominator - 1)
     }
 
-    #[cfg(not(feature = "fast-mod"))]
-    fn fast_mod(&self, denominator: Self) -> Self {
-        *self % denominator
-    }
-
-    #[cfg(feature = "fast-mod")]
     fn maybe_next_power_of_two(&self) -> Self {
         self.next_power_of_two()
     }
+}
 
-    #[cfg(not(feature = "fast-mod"))]
+#[cfg(not(feature = "fast-mod"))]
+impl FastMod for usize {
+    fn fast_mod(&self, denominator: Self) -> Self {
+        *self % denominator
+    }
     fn maybe_next_power_of_two(&self) -> Self {
         *self
     }
@@ -59,17 +70,17 @@ struct NexusQ<T> {
     reader_tracker: ReaderTracker,
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for NexusQ<T> {}
 unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> Drop for NexusQ<T> {
     fn drop(&mut self) {
-        let current_length = (self.producer_tracker.current_published() + 1) as usize;
+        let current_length = self.producer_tracker.current_published() + 1;
+        let current_length = current_length.min(self.length as i64) as usize;
         unsafe {
             // This ensures that drop is run correctly for all valid items in the buffer and also not run on uninitialised memory!
-            if current_length < self.length {
-                self.buffer.set_len(current_length);
-            }
+            self.buffer.set_len(current_length);
         }
     }
 }
@@ -89,12 +100,13 @@ impl<T> NexusQ<T> {
             length: size,
             buffer,
             buffer_raw,
-            producer_tracker: Default::default(),
+            producer_tracker: ProducerTracker::default(),
             reader_tracker: ReaderTracker::new(size),
         }
     }
 }
 
+#[must_use]
 pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
     let nexus = Arc::new(NexusQ::new(size));
     let receiver = Receiver::new(Arc::clone(&nexus));
@@ -105,11 +117,11 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_shared::*;
+    use crate::test_shared::{setup_tests, test};
 
     #[test]
     fn basic_channel_test() {
-        setup_logging();
+        setup_tests();
         let (mut sender, mut receiver) = make_channel(5);
 
         sender.send(1);
@@ -126,55 +138,54 @@ mod tests {
 
     #[test]
     fn one_sender_one_receiver() {
-        setup_logging();
+        setup_tests();
         test(1, 1, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn one_sender_one_receiver_long() {
-        setup_logging();
-        test(1, 1, 500000, 5);
+        setup_tests();
+        test(1, 1, 500_000, 5);
     }
 
     #[test]
     fn one_sender_two_receiver() {
-        setup_logging();
+        setup_tests();
         test(1, 2, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn one_sender_two_receiver_long() {
-        setup_logging();
-        test(1, 2, 500000, 5);
+        setup_tests();
+        test(1, 2, 500_000, 5);
     }
 
     #[test]
     fn two_sender_one_receiver() {
-        setup_logging();
+        setup_tests();
         test(2, 1, 100, 5);
     }
 
     #[test]
     fn two_sender_two_receiver() {
-        setup_logging();
+        setup_tests();
         test(2, 2, 100, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_long() {
-        setup_logging();
-        test(2, 2, 10000, 5);
+        setup_tests();
+        test(2, 2, 10_000, 5);
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn two_sender_two_receiver_stress() {
-        setup_logging();
-        for i in 0..1000 {
-            println!("run {}", i);
+        setup_tests();
+        for _ in 0..1000 {
             test(2, 2, 1000, 5);
         }
     }
@@ -183,8 +194,8 @@ mod tests {
 #[cfg(test)]
 mod drop_tests {
     use super::*;
-    use crate::test_shared::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use crate::test_shared::setup_tests;
+    use core::sync::atomic::{AtomicU64, Ordering};
 
     #[derive(Debug, Clone)]
     struct CustomDropper {
@@ -194,22 +205,22 @@ mod drop_tests {
     impl CustomDropper {
         fn new(counter: &Arc<AtomicU64>) -> Self {
             Self {
-                value: 42424242,
+                value: 42_424_242,
                 counter: Arc::clone(counter),
             }
         }
     }
     impl Drop for CustomDropper {
         fn drop(&mut self) {
-            assert_eq!(self.value, 42424242);
+            assert_eq!(self.value, 42_424_242);
             self.counter.fetch_add(1, Ordering::Relaxed);
         }
     }
 
     #[test]
     fn valid_drop_full_buffer() {
-        setup_logging();
-        let counter = Default::default();
+        setup_tests();
+        let counter = Arc::default();
         let (mut sender, _) = make_channel(10);
         for _ in 0..10 {
             sender.send(CustomDropper::new(&counter));
@@ -220,8 +231,8 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_partial_buffer() {
-        setup_logging();
-        let counter = Default::default();
+        setup_tests();
+        let counter = Arc::default();
         let (mut sender, _) = make_channel(10);
         for _ in 0..3 {
             sender.send(CustomDropper::new(&counter));
@@ -232,15 +243,15 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_empty_buffer() {
-        setup_logging();
+        setup_tests();
         let (sender, _) = make_channel::<CustomDropper>(10);
         drop(sender);
     }
 
     #[test]
     fn valid_drop_overwrite() {
-        setup_logging();
-        let counter = Default::default();
+        setup_tests();
+        let counter = Arc::default();
         let (mut sender, mut receiver) = make_channel::<CustomDropper>(4);
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));

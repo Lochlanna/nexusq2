@@ -24,39 +24,49 @@ impl Waitable for AtomicI64 {
 }
 
 #[derive(Debug)]
-pub struct HybridWaitStrategy {
+pub struct Hybrid {
     num_spin: u64,
     num_yield: u64,
     event: event_listener::Event,
 }
 
-impl Default for HybridWaitStrategy {
+impl Default for Hybrid {
     fn default() -> Self {
         Self {
             num_spin: 50,
             num_yield: 0,
-            event: Default::default(),
+            event: event_listener::Event::default(),
         }
     }
 }
 
-impl HybridWaitStrategy {
+impl Hybrid {
     pub fn new(num_spin: u64, num_yield: u64) -> Self {
         Self {
             num_spin,
             num_yield,
-            event: Default::default(),
+            event: event_listener::Event::default(),
         }
     }
 }
 
-impl WaitStrategy for HybridWaitStrategy {
+impl WaitStrategy for Hybrid {
+    #[cfg(not(feature = "std"))]
+    fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
+        loop {
+            if let Some(v) = variable.at_least(min_value) {
+                return v;
+            }
+            core::hint::spin_loop()
+        }
+    }
+    #[cfg(feature = "std")]
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
         for _ in 0..self.num_spin {
             if let Some(v) = variable.at_least(min_value) {
                 return v;
             }
-            core::hint::spin_loop()
+            core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
             if let Some(v) = variable.at_least(min_value) {

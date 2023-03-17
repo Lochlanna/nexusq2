@@ -16,7 +16,6 @@ impl<T> TestReceiver<T> for crate::Receiver<T>
 where
     T: Clone,
 {
-    #[inline(always)]
     fn test_recv(&mut self) -> T {
         self.recv()
     }
@@ -44,14 +43,12 @@ where
     }
 }
 
-#[inline(always)]
 fn read_n(mut receiver: impl TestReceiver<usize> + 'static, num_to_read: usize) {
     for _ in 0..num_to_read {
         black_box(receiver.test_recv());
     }
 }
 
-#[inline(always)]
 fn write_n(mut sender: impl TestSender<usize> + 'static, num_to_write: usize) {
     for i in 0..num_to_write {
         sender.test_send(i);
@@ -109,7 +106,7 @@ fn test_bench() {
     for _ in 1..=1 {
         let duration = nexus(num, writers, readers, &pool, &tx, &mut rx, iterations);
         let throughput =
-            (num * writers * iterations as usize) as f64 / duration.as_secs_f64() / 1000000_f64;
+            (num * writers * iterations as usize) as f64 / duration.as_secs_f64() / 1_000_000_f64;
         println!("{readers} throughput is {throughput} million/second");
         let _ = std::io::stdout().flush();
     }
