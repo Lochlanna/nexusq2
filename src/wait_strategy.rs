@@ -12,7 +12,7 @@ pub struct Hybrid {
 impl Hybrid {
     pub const fn new(_: u64, _: u64, starting_value: i64) -> Self {
         Self {
-            num_spin: 50,
+            num_spin: 0,
             num_yield: 0,
             lock: parking_lot::Mutex::new(starting_value),
             event: parking_lot::Condvar::new(),
