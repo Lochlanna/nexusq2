@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use std::io::Write;
 
-use crate::make_channel;
+use nexusq2::make_channel;
 use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
 
@@ -12,7 +12,7 @@ trait TestReceiver<T>: Send {
     fn another(&self) -> Self;
 }
 
-impl<T> TestReceiver<T> for crate::Receiver<T>
+impl<T> TestReceiver<T> for nexusq2::Receiver<T>
 where
     T: Clone,
 {
@@ -30,7 +30,7 @@ trait TestSender<T>: Send {
     fn another(&self) -> Self;
 }
 
-impl<T> TestSender<T> for crate::Sender<T>
+impl<T> TestSender<T> for nexusq2::Sender<T>
 where
     T: Send,
 {
@@ -94,8 +94,8 @@ fn nexus(
 /// Used for debugging and profiling. Based on the benchmark code
 #[test]
 #[ignore]
-fn test_bench() {
-    let num = 50000;
+fn profile() {
+    let num = 10000;
     // let num = 1000;
     let writers = 2;
     let readers = 2;

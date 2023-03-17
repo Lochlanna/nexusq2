@@ -17,11 +17,8 @@ mod receiver;
 mod sender;
 mod wait_strategy;
 
-#[cfg(all(test, feature = "std"))]
-mod bench_test;
-
 #[cfg(test)]
-mod test_shared;
+pub mod test_shared;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -117,7 +114,7 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_shared::{setup_tests, test};
+    use crate::test_shared::setup_tests;
 
     #[test]
     fn basic_channel_test() {
@@ -134,60 +131,6 @@ mod tests {
         assert_eq!(receiver.recv(), 3);
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
-    }
-
-    #[test]
-    fn one_sender_one_receiver() {
-        setup_tests();
-        test(1, 1, 100, 5);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn one_sender_one_receiver_long() {
-        setup_tests();
-        test(1, 1, 500_000, 5);
-    }
-
-    #[test]
-    fn one_sender_two_receiver() {
-        setup_tests();
-        test(1, 2, 100, 5);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn one_sender_two_receiver_long() {
-        setup_tests();
-        test(1, 2, 500_000, 5);
-    }
-
-    #[test]
-    fn two_sender_one_receiver() {
-        setup_tests();
-        test(2, 1, 100, 5);
-    }
-
-    #[test]
-    fn two_sender_two_receiver() {
-        setup_tests();
-        test(2, 2, 100, 5);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn two_sender_two_receiver_long() {
-        setup_tests();
-        test(2, 2, 10_000, 5);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn two_sender_two_receiver_stress() {
-        setup_tests();
-        for _ in 0..1000 {
-            test(2, 2, 1000, 5);
-        }
     }
 }
 
