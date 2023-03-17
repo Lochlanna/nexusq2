@@ -11,17 +11,17 @@ std=[]
 
 
 [dependencies]
-event-listener = { version = "2.5.3"}
+event-listener = { version = "2.5"}
 
 
 [dev-dependencies]
 criterion = { version = "0.4"}
-workerpool = "1.2.0"
-pretty_assertions_sorted = "1.2.1"
+workerpool = "1.2"
+pretty_assertions_sorted = "1.2"
 rand = "0.8"
 
 [target.'cfg(not(miri))'.dev-dependencies]
-multiqueue2 = "0.1.7"
+multiqueue2 = "0.1"
 
 [profile.release]
 opt-level = 3
