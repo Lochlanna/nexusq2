@@ -1,4 +1,4 @@
-use crate::wait_strategy::{Hybrid, WaitStrategy};
+use crate::wait_strategy::Hybrid;
 use core::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ impl Default for ProducerTracker {
         Self {
             claimed: AtomicI64::new(0),
             published: AtomicI64::new(-1),
-            wait_strategy: Hybrid::default(),
+            wait_strategy: Hybrid::new(100, 0, -1),
         }
     }
 }
@@ -30,7 +30,7 @@ impl ProducerTracker {
         {
             core::hint::spin_loop();
         }
-        self.wait_strategy.notify();
+        self.wait_strategy.notify(value);
     }
     pub fn wait_for_publish(&self, min_published_value: i64) -> i64 {
         let v = self

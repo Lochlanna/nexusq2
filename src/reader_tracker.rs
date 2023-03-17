@@ -1,4 +1,4 @@
-use crate::wait_strategy::{Hybrid, WaitStrategy};
+use crate::wait_strategy::Hybrid;
 use crate::FastMod;
 use alloc::vec::Vec;
 use core::sync::atomic::{
@@ -20,7 +20,7 @@ impl ReaderTracker {
         Self {
             tokens,
             tail: AtomicI64::new(0),
-            wait_strategy: Hybrid::default(),
+            wait_strategy: Hybrid::new(100, 0, 0),
         }
     }
 
@@ -57,7 +57,7 @@ impl ReaderTracker {
             let tail = self.tail.load(Acquire);
             if tail == from && from_token.load(Acquire) == 0 {
                 self.tail.store(to, Release);
-                self.wait_strategy.notify();
+                self.wait_strategy.notify(to);
             }
         }
     }

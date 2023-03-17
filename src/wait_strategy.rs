@@ -1,56 +1,26 @@
 use core::sync::atomic::{AtomicI64, Ordering};
-
-pub trait WaitStrategy {
-    fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType;
-    fn notify(&self) {}
-}
-
-pub trait Waitable {
-    type BaseType: Copy;
-    fn at_least(&self, expected: Self::BaseType) -> Option<Self::BaseType>;
-}
-
-impl Waitable for AtomicI64 {
-    type BaseType = i64;
-
-    fn at_least(&self, expected: Self::BaseType) -> Option<Self::BaseType> {
-        let current_value = self.load(Ordering::Acquire);
-        if current_value >= expected {
-            Some(current_value)
-        } else {
-            None
-        }
-    }
-}
+use std::sync::atomic::Ordering::Acquire;
 
 #[derive(Debug)]
 pub struct Hybrid {
     num_spin: u64,
     num_yield: u64,
-    event: event_listener::Event,
+    lock: parking_lot::Mutex<i64>,
+    event: parking_lot::Condvar,
 }
 
-impl Default for Hybrid {
-    fn default() -> Self {
+impl Hybrid {
+    pub const fn new(_: u64, _: u64, starting_value: i64) -> Self {
         Self {
             num_spin: 50,
             num_yield: 0,
-            event: event_listener::Event::default(),
+            lock: parking_lot::Mutex::new(starting_value),
+            event: parking_lot::Condvar::new(),
         }
     }
 }
 
 impl Hybrid {
-    pub fn new(num_spin: u64, num_yield: u64) -> Self {
-        Self {
-            num_spin,
-            num_yield,
-            event: event_listener::Event::default(),
-        }
-    }
-}
-
-impl WaitStrategy for Hybrid {
     #[cfg(not(feature = "std"))]
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
         loop {
@@ -61,31 +31,35 @@ impl WaitStrategy for Hybrid {
         }
     }
     #[cfg(feature = "std")]
-    fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
+    pub fn wait_for_at_least(&self, variable: &AtomicI64, min_value: i64) -> i64 {
         for _ in 0..self.num_spin {
-            if let Some(v) = variable.at_least(min_value) {
-                return v;
+            let current_value = variable.load(Acquire);
+            if current_value >= min_value {
+                return current_value;
             }
             core::hint::spin_loop();
         }
-        for _ in 0..self.num_yield {
-            if let Some(v) = variable.at_least(min_value) {
-                return v;
-            }
-            std::thread::yield_now();
+        // for _ in 0..self.num_yield {
+        //     if let Some(v) = variable.at_least(min_value) {
+        //         return v;
+        //     }
+        //     std::thread::yield_now();
+        // }
+        {
+            let mut guard = self.lock.lock();
+            self.event
+                .wait_while(&mut guard, |current_value| *current_value < min_value);
         }
-        loop {
-            if let Some(v) = variable.at_least(min_value) {
-                return v;
-            }
-            let listener = self.event.listen();
-            if let Some(v) = variable.at_least(min_value) {
-                return v;
-            }
-            listener.wait();
-        }
+        // This load is required for memory ordering reasons...
+        variable.load(Acquire)
     }
-    fn notify(&self) {
-        self.event.notify(usize::MAX);
+    pub fn notify(&self, value: i64) {
+        let mut guard = self.lock.lock();
+        if *guard >= value {
+            //don't need to notify. Whoever wrote the larger value will do it!
+            return;
+        }
+        *guard = value;
+        self.event.notify_all();
     }
 }
