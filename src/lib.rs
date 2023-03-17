@@ -17,9 +17,6 @@ mod receiver;
 mod sender;
 mod wait_strategy;
 
-#[cfg(test)]
-pub mod test_shared;
-
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use producer_tracker::ProducerTracker;
@@ -114,13 +111,11 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_shared::setup_tests;
+    use pretty_assertions_sorted::assert_eq;
 
     #[test]
     fn basic_channel_test() {
-        setup_tests();
         let (mut sender, mut receiver) = make_channel(5);
-
         sender.send(1);
         sender.send(2);
         sender.send(3);
@@ -137,8 +132,8 @@ mod tests {
 #[cfg(test)]
 mod drop_tests {
     use super::*;
-    use crate::test_shared::setup_tests;
     use core::sync::atomic::{AtomicU64, Ordering};
+    use pretty_assertions_sorted::assert_eq;
 
     #[derive(Debug, Clone)]
     struct CustomDropper {
@@ -162,7 +157,6 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_full_buffer() {
-        setup_tests();
         let counter = Arc::default();
         let (mut sender, _) = make_channel(10);
         for _ in 0..10 {
@@ -174,7 +168,6 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_partial_buffer() {
-        setup_tests();
         let counter = Arc::default();
         let (mut sender, _) = make_channel(10);
         for _ in 0..3 {
@@ -186,14 +179,12 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_empty_buffer() {
-        setup_tests();
         let (sender, _) = make_channel::<CustomDropper>(10);
         drop(sender);
     }
 
     #[test]
     fn valid_drop_overwrite() {
-        setup_tests();
         let counter = Arc::default();
         let (mut sender, mut receiver) = make_channel::<CustomDropper>(4);
         sender.send(CustomDropper::new(&counter));
@@ -223,6 +214,7 @@ mod drop_tests {
 #[cfg(test)]
 mod fast_mod_tests {
     use super::*;
+    use pretty_assertions_sorted::assert_eq;
 
     #[test]
     fn test_fast_mod() {

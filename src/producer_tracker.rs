@@ -44,11 +44,10 @@ impl ProducerTracker {
 #[cfg(test)]
 mod producer_tracker_tests {
     use super::*;
-    use crate::test_shared::setup_tests;
+    use pretty_assertions_sorted::assert_eq;
 
     #[test]
     fn basic_test() {
-        setup_tests();
         let producer_tracker = ProducerTracker::default();
         assert_eq!(producer_tracker.current_published(), -1);
         assert_eq!(producer_tracker.claim(), 0);

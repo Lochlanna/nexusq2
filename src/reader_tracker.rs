@@ -78,11 +78,10 @@ impl ReaderTracker {
 #[cfg(test)]
 mod reader_tracker_tests {
     use super::*;
-    use crate::test_shared::setup_tests;
+    use pretty_assertions_sorted::assert_eq;
 
     #[test]
     fn basic_test() {
-        setup_tests();
         let reader_tracker = ReaderTracker::new(8);
         assert_eq!(reader_tracker.current_tail_position(), 0);
         for token in &reader_tracker.tokens {

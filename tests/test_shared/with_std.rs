@@ -1,19 +1,10 @@
 use nexusq2::make_channel;
 use nexusq2::Receiver;
 use nexusq2::Sender;
-use simple_logger::SimpleLogger;
+use pretty_assertions_sorted::assert_eq_sorted;
 use std::collections::HashMap;
-use std::sync::Once;
 use std::thread;
 use std::time::Duration;
-
-static START: Once = Once::new();
-
-pub fn setup_tests() {
-    START.call_once(|| {
-        SimpleLogger::new().init().unwrap();
-    });
-}
 
 pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
     advanced_test(
@@ -63,25 +54,17 @@ pub fn advanced_test(
     let mut expected_map = HashMap::with_capacity(num);
     expected_map.extend((0..num).map(|i| (i, num_senders)));
 
-    let results: Vec<_> = receivers
+    let results = receivers
         .into_iter()
-        .map(|jh| jh.join().expect("couldn't join read thread"))
-        .map(|result| {
-            let mut count_map: HashMap<usize, usize> = HashMap::with_capacity(num);
-            for v in result {
-                let e = count_map.entry(v).or_default();
-                *e += 1;
-            }
-            count_map.retain(|k, v| expected_map.get(k).map_or(true, |ev| *v != *ev));
-            count_map
-        })
-        .collect();
+        .map(|jh| jh.join().expect("couldn't join read thread"));
 
-    for result in &results {
-        if !result.is_empty() {
-            println!("diff: {result:?}");
+    for result in results {
+        let mut count_map: HashMap<usize, usize> = HashMap::with_capacity(num);
+        for v in result {
+            let e = count_map.entry(v).or_default();
+            *e += 1;
         }
-        assert!(result.is_empty());
+        assert_eq_sorted!(expected_map, count_map);
     }
 }
 
