@@ -23,11 +23,21 @@ impl Waitable for AtomicI64 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct HybridWaitStrategy {
     num_spin: u64,
     num_yield: u64,
     event: event_listener::Event,
+}
+
+impl Default for HybridWaitStrategy {
+    fn default() -> Self {
+        Self {
+            num_spin: 50,
+            num_yield: 0,
+            event: Default::default(),
+        }
+    }
 }
 
 impl HybridWaitStrategy {
@@ -40,19 +50,12 @@ impl HybridWaitStrategy {
     }
 }
 
-/// This function is for compatibility with loom which doesn't like full spins
-fn maybe_yield() {
-    #[cfg(loom)]
-    crate::thread::yield_now();
-}
-
 impl WaitStrategy for HybridWaitStrategy {
     fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
         for _ in 0..self.num_spin {
             if let Some(v) = variable.at_least(min_value) {
                 return v;
             }
-            maybe_yield();
             core::hint::spin_loop()
         }
         for _ in 0..self.num_yield {

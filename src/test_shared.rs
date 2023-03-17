@@ -59,9 +59,7 @@ pub(crate) fn advanced_test(
     });
 
     let mut expected_map = HashMap::with_capacity(num);
-    for i in 0..num {
-        expected_map.insert(i, num_senders);
-    }
+    expected_map.extend((0..num).map(|i| (i, num_senders)));
 
     let results: Vec<_> = receivers
         .into_iter()
@@ -72,16 +70,8 @@ pub(crate) fn advanced_test(
                 let e = count_map.entry(v).or_default();
                 *e += 1;
             }
-            let mut diff_map = HashMap::new();
-            for (k, v) in count_map {
-                let expected_count = expected_map
-                    .get(&k)
-                    .expect("key didn't exist in expected map");
-                if *expected_count != v {
-                    diff_map.insert(k, v);
-                }
-            }
-            diff_map
+            count_map.retain(|k, v| expected_map.get(k).map(|ev| *v != *ev).unwrap_or(true));
+            count_map
         })
         .collect();
 
