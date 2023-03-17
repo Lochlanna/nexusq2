@@ -57,7 +57,6 @@ impl FastMod for usize {
 
 #[derive(Debug)]
 struct NexusQ<T> {
-    length: usize,
     buffer: Vec<T>,
     buffer_raw: *mut T,
     producer_tracker: ProducerTracker,
@@ -71,7 +70,7 @@ unsafe impl<T> Sync for NexusQ<T> {}
 impl<T> Drop for NexusQ<T> {
     fn drop(&mut self) {
         let current_length = self.producer_tracker.current_published() + 1;
-        let current_length = current_length.min(self.length as i64) as usize;
+        let current_length = current_length.min(self.buffer.len() as i64) as usize;
         unsafe {
             // This ensures that drop is run correctly for all valid items in the buffer and also not run on uninitialised memory!
             self.buffer.set_len(current_length);
@@ -91,7 +90,6 @@ impl<T> NexusQ<T> {
         let buffer_raw = buffer.as_mut_ptr();
 
         Self {
-            length: size,
             buffer,
             buffer_raw,
             producer_tracker: ProducerTracker::default(),

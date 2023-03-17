@@ -119,15 +119,15 @@ fn throughput(c: &mut Criterion) {
                     });
                 },
             );
-            // group.bench_with_input(
-            //     BenchmarkId::new("multiq2", RunParam(input)),
-            //     &input,
-            //     |b, &input| {
-            //         b.iter_custom(|iters| {
-            //             black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
-            //         });
-            //     },
-            // );
+            group.bench_with_input(
+                BenchmarkId::new("multiq2", RunParam(input)),
+                &input,
+                |b, &input| {
+                    b.iter_custom(|iters| {
+                        black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
+                    });
+                },
+            );
             group.finish();
         }
     }
