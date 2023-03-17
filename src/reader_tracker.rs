@@ -3,7 +3,7 @@ use crate::FastMod;
 use alloc::vec::Vec;
 use core::sync::atomic::{
     AtomicI64, AtomicUsize,
-    Ordering::{AcqRel, Acquire, Release, SeqCst},
+    Ordering::{AcqRel, Acquire, Relaxed, Release, SeqCst},
 };
 
 #[derive(Debug)]
@@ -54,8 +54,8 @@ impl ReaderTracker {
         let previous = from_token.fetch_sub(1, AcqRel);
 
         if previous == 1 {
-            let tail = self.tail.load(Acquire);
-            if tail == from && from_token.load(Acquire) == 0 {
+            let tail = self.tail.load(Relaxed);
+            if tail == from && from_token.load(Relaxed) == 0 {
                 self.tail.store(to, Release);
                 self.wait_strategy.notify(to);
             }
@@ -63,11 +63,8 @@ impl ReaderTracker {
     }
 
     pub fn wait_for_tail(&self, min_tail_value: i64) -> i64 {
-        let v = self
-            .wait_strategy
-            .wait_for_at_least(&self.tail, min_tail_value);
-        debug_assert!(self.current_tail_position() >= min_tail_value);
-        v
+        self.wait_strategy
+            .wait_for_at_least(&self.tail, min_tail_value)
     }
 
     pub fn current_tail_position(&self) -> i64 {

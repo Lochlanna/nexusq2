@@ -34,7 +34,7 @@ fn two_sender_two_receiver() {
 }
 
 #[test]
-#[cfg_attr(miri, ignore)]
+// #[cfg_attr(miri, ignore)]
 fn two_sender_two_receiver_long() {
     test(2, 2, 1000, 5);
 }
