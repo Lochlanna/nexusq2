@@ -1,5 +1,5 @@
 use crate::producer_tracker::ProducerTracker;
-use crate::{Cell, FastMod, NexusQ};
+use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
 
 #[derive(Debug)]

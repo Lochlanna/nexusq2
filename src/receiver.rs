@@ -1,4 +1,4 @@
-use crate::{Cell, FastMod, NexusQ};
+use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ where
 
         let value;
         unsafe {
-            value = (*new_cell).value.clone();
+            value = (*new_cell).clone_value();
         }
 
         value
