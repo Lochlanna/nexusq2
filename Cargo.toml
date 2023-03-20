@@ -49,7 +49,7 @@ rpath = false
 [[bench]]
 name = "throughput"
 harness = false
-#
-#[[bench]]
-#name = "latency"
-#harness = false
+
+[[bench]]
+name = "latency"
+harness = false
