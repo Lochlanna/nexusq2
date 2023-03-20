@@ -53,7 +53,9 @@ fn multiq2(
 ) -> Duration {
     let mut total_duration = Duration::new(0, 0);
     for _ in 0..iters {
-        let (sender, receiver) = multiqueue2::broadcast_queue(100);
+        // let (sender, receiver) = multiqueue2::broadcast_queue(100);
+        let (sender, receiver) =
+            multiqueue2::broadcast_queue_with(100, multiqueue2::wait::BusyWait::default());
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
     }
