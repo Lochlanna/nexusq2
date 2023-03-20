@@ -7,6 +7,7 @@ pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     buffer_raw: *mut Cell<T>,
     published: *const AtomicI64,
+    published_cache: i64,
     buffer_length: usize,
     cursor: i64,
 }
@@ -23,6 +24,7 @@ impl<T> Receiver<T> {
             nexus,
             buffer_raw,
             published,
+            published_cache: -1,
             buffer_length,
             cursor: 0,
         }
@@ -51,6 +53,7 @@ impl<T> Clone for Receiver<T> {
             nexus: Arc::clone(&self.nexus),
             buffer_raw: self.buffer_raw,
             published: self.published,
+            published_cache: self.published_cache,
             buffer_length: self.buffer_length,
             cursor: self.cursor,
         }
@@ -61,9 +64,10 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
-    fn wait_for_published(&self) {
+    fn wait_for_published(&mut self) {
         unsafe {
-            while (*self.published).load(Ordering::Acquire) < self.cursor {
+            while self.published_cache < self.cursor {
+                self.published_cache = (*self.published).load(Ordering::Acquire);
                 core::hint::spin_loop();
             }
         }

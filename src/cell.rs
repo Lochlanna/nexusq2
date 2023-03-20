@@ -59,8 +59,8 @@ impl<T> Cell<T> {
     }
 
     pub fn initial_queue_for_read(&self) {
-        self.counter.fetch_sub(1, Ordering::Release);
-        debug_assert!(self.counter.load(Ordering::Acquire) < 0);
+        let old = self.counter.fetch_sub(1, Ordering::Release);
+        debug_assert!(old <= 0);
     }
 }
 
