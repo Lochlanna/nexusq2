@@ -68,7 +68,6 @@ unsafe impl<T> Send for NexusQ<T> {}
 unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> NexusQ<T> {
-    #[allow(clippy::uninit_vec)]
     fn new(size: usize) -> Self {
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
