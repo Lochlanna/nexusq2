@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
     claimed: *const AtomicI64,
+    tail: *const AtomicI64,
+    published: *const AtomicI64,
     buffer_raw: *mut Cell<T>,
     buffer_length: i64,
     buffer_length_unsigned: usize,
@@ -18,10 +20,14 @@ impl<T> Sender<T> {
         let buffer_length = nexus.buffer.len() as i64;
         let buffer_length_unsigned = nexus.buffer.len();
         let claimed = nexus.get_claimed();
+        let tail = nexus.get_tail();
+        let published = nexus.get_published();
         let buffer_raw = nexus.buffer_raw;
         Self {
             nexus,
             claimed,
+            tail,
+            published,
             buffer_raw,
             buffer_length,
             buffer_length_unsigned,
@@ -52,8 +58,26 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        (*cell).claim_for_write();
+        (*cell).wait_for_write();
+
+        while (*self.tail)
+            .compare_exchange_weak(claimed - 1, claimed, Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            core::hint::spin_loop();
+        }
+
         (*cell).write(value);
-        (*cell).finish_write();
+
+        if claimed == 0 {
+            (*cell).finish_write();
+        }
+
+        while (*self.published)
+            .compare_exchange_weak(claimed - 1, claimed, Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            core::hint::spin_loop();
+        }
     }
 }

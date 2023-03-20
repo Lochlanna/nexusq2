@@ -20,7 +20,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 pub use receiver::Receiver;
 pub use sender::Sender;
@@ -60,6 +60,8 @@ struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicI64,
+    tail: AtomicI64,
+    published: AtomicI64,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -79,11 +81,29 @@ impl<T> NexusQ<T> {
             buffer,
             buffer_raw,
             claimed: AtomicI64::default(),
+            tail: AtomicI64::new(-1),
+            published: AtomicI64::new(-1),
         }
     }
 
     pub(crate) fn get_claimed(&self) -> *const AtomicI64 {
-        std::ptr::addr_of!(self.claimed)
+        &self.claimed
+    }
+    pub(crate) fn get_tail(&self) -> *const AtomicI64 {
+        &self.tail
+    }
+    pub(crate) fn get_published(&self) -> *const AtomicI64 {
+        &self.published
+    }
+
+    pub(crate) fn publish(&self, value: i64) {
+        while self
+            .published
+            .compare_exchange_weak(value - 1, value, Ordering::SeqCst, Ordering::Relaxed)
+            .is_err()
+        {
+            core::hint::spin_loop();
+        }
     }
 }
 

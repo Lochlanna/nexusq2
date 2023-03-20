@@ -6,9 +6,10 @@ trait ToPositive {
 
 impl ToPositive for AtomicI64 {
     //TODO is there an optimisation that can be made here?
+    #[allow(clippy::cast_possible_wrap)]
     fn to_positive(&self) {
         while self
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| Some(-v))
+            .fetch_update(Ordering::Release, Ordering::Acquire, |v| Some(-v))
             .is_err()
         {
             core::hint::spin_loop();
@@ -27,52 +28,39 @@ impl<T> Default for Cell<T> {
     fn default() -> Self {
         Self {
             value: None,
-            counter: AtomicI64::new(-1),
+            counter: AtomicI64::new(0),
         }
     }
 }
 
 impl<T> Cell<T> {
-    pub fn claim_for_write(&self) {
-        if self.counter.load(Ordering::Acquire) < 0 {
-            return;
-        }
-        while self
-            .counter
-            .compare_exchange_weak(1, -1, Ordering::AcqRel, Ordering::Relaxed)
-            .is_err()
-        {
-            // we are waiting for readers here!
+    pub fn wait_for_write(&self) {
+        while self.counter.load(Ordering::Acquire) > 0 {
             core::hint::spin_loop();
         }
     }
+
     pub fn write(&mut self, value: T) {
         self.value = Some(value);
     }
+
     pub fn finish_write(&self) {
         self.counter.to_positive();
     }
 
     pub fn finish_read(&self) {
-        self.counter.fetch_sub(1, Ordering::Release);
-    }
-
-    pub fn wait_for_read(&self) {
-        while self.counter.load(Ordering::Acquire) < 0 {
-            core::hint::spin_loop();
-        }
+        let old = self.counter.fetch_sub(1, Ordering::SeqCst);
+        assert!(old > 0);
     }
 
     pub fn claim_for_read(&self) {
-        self.wait_for_read();
-        let old = self.counter.fetch_add(1, Ordering::Release);
-        debug_assert!(old > 0);
+        let old = self.counter.fetch_add(1, Ordering::SeqCst);
+        debug_assert!(old >= 0);
     }
 
     pub fn initial_queue_for_read(&self) {
-        //TODO this will need to do some fancy fancy to check if it's already been flipped
-        debug_assert!(self.counter.load(Ordering::Acquire) < 0);
-        self.counter.fetch_sub(1, Ordering::Release);
+        self.counter.fetch_sub(1, Ordering::SeqCst);
+        debug_assert!(self.counter.load(Ordering::SeqCst) < 0);
     }
 }
 

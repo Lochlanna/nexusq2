@@ -1,10 +1,12 @@
 use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     buffer_raw: *mut Cell<T>,
+    published: *const AtomicI64,
     buffer_length: usize,
     cursor: i64,
 }
@@ -15,10 +17,12 @@ impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         let buffer_length = nexus.buffer.len();
         let buffer_raw = nexus.buffer_raw;
+        let published = nexus.get_published();
         Self::register(buffer_raw);
         Self {
             nexus,
             buffer_raw,
+            published,
             buffer_length,
             cursor: 0,
         }
@@ -46,6 +50,7 @@ impl<T> Clone for Receiver<T> {
         Self {
             nexus: Arc::clone(&self.nexus),
             buffer_raw: self.buffer_raw,
+            published: self.published,
             buffer_length: self.buffer_length,
             cursor: self.cursor,
         }
@@ -56,6 +61,13 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
+    fn wait_for_published(&self) {
+        unsafe {
+            while (*self.published).load(Ordering::Acquire) < self.cursor {
+                core::hint::spin_loop();
+            }
+        }
+    }
     pub fn recv(&mut self) -> T {
         unsafe { self.unsafe_recv() }
     }
@@ -63,11 +75,12 @@ where
         let previous_index = ((self.cursor - 1) as usize).fast_mod(self.buffer_length);
         let current_index = (self.cursor as usize).fast_mod(self.buffer_length);
         let current_cell = self.buffer_raw.add(current_index);
-        if self.cursor == 0 {
-            (*current_cell).wait_for_read();
-        } else {
-            let previous_cell = self.buffer_raw.add(previous_index);
+
+        self.wait_for_published();
+
+        if self.cursor > 0 {
             (*current_cell).claim_for_read();
+            let previous_cell = self.buffer_raw.add(previous_index);
             (*previous_cell).finish_read();
         }
         self.cursor += 1;
