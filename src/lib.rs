@@ -61,7 +61,6 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicI64,
     tail: AtomicI64,
-    published: AtomicI64,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -82,7 +81,6 @@ impl<T> NexusQ<T> {
             buffer_raw,
             claimed: AtomicI64::default(),
             tail: AtomicI64::new(-1),
-            published: AtomicI64::new(-1),
         }
     }
 
@@ -91,9 +89,6 @@ impl<T> NexusQ<T> {
     }
     pub(crate) const fn get_tail(&self) -> *const AtomicI64 {
         &self.tail
-    }
-    pub(crate) const fn get_published(&self) -> *const AtomicI64 {
-        &self.published
     }
 }
 

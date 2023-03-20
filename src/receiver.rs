@@ -1,12 +1,10 @@
 use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     buffer_raw: *mut Cell<T>,
-    published: *const AtomicI64,
     published_cache: i64,
     buffer_length: usize,
     cursor: i64,
@@ -18,12 +16,10 @@ impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         let buffer_length = nexus.buffer.len();
         let buffer_raw = nexus.buffer_raw;
-        let published = nexus.get_published();
         Self::register(buffer_raw);
         Self {
             nexus,
             buffer_raw,
-            published,
             published_cache: -1,
             buffer_length,
             cursor: 0,
@@ -52,7 +48,6 @@ impl<T> Clone for Receiver<T> {
         Self {
             nexus: Arc::clone(&self.nexus),
             buffer_raw: self.buffer_raw,
-            published: self.published,
             published_cache: self.published_cache,
             buffer_length: self.buffer_length,
             cursor: self.cursor,
@@ -64,14 +59,6 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
-    fn wait_for_published(&mut self) {
-        unsafe {
-            while self.published_cache < self.cursor {
-                self.published_cache = (*self.published).load(Ordering::Acquire);
-                core::hint::spin_loop();
-            }
-        }
-    }
     pub fn recv(&mut self) -> T {
         unsafe { self.unsafe_recv() }
     }
@@ -80,7 +67,7 @@ where
         let current_index = (self.cursor as usize).fast_mod(self.buffer_length);
         let current_cell = self.buffer_raw.add(current_index);
 
-        self.wait_for_published();
+        (*current_cell).wait_for_published(self.cursor);
 
         if self.cursor > 0 {
             (*current_cell).claim_for_read();

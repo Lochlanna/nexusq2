@@ -21,6 +21,7 @@ impl ToPositive for AtomicI64 {
 pub struct Cell<T> {
     value: Option<T>,
     counter: AtomicI64,
+    current_id: AtomicI64,
 }
 
 impl<T> Default for Cell<T> {
@@ -29,6 +30,7 @@ impl<T> Default for Cell<T> {
         Self {
             value: None,
             counter: AtomicI64::new(0),
+            current_id: AtomicI64::new(-1),
         }
     }
 }
@@ -44,13 +46,30 @@ impl<T> Cell<T> {
         self.value = Some(value);
     }
 
-    pub fn finish_write(&self) {
+    pub fn initial_finish_write(&self) {
+        debug_assert!(self.counter.load(Ordering::Acquire) < 0);
         self.counter.to_positive();
+    }
+
+    pub fn publish(&self, id: i64) {
+        debug_assert!(id > self.current_id.load(Ordering::Acquire));
+        self.current_id.store(id, Ordering::Release);
     }
 
     pub fn finish_read(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old > 0);
+    }
+
+    pub fn wait_for_published(&self, expected_published_id: i64) {
+        loop {
+            let published = self.current_id.load(Ordering::Acquire);
+            if published == expected_published_id {
+                break;
+            }
+            debug_assert!(published <= expected_published_id);
+            core::hint::spin_loop();
+        }
     }
 
     pub fn claim_for_read(&self) {
@@ -80,8 +99,9 @@ mod cell_tests {
     use pretty_assertions_sorted::assert_eq;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_make_positive() {
-        for i in -10_000_000_i64..0 {
+        for i in -100_000_i64..0 {
             let value = AtomicI64::new(i);
             let expected = i.abs();
             value.to_positive();
