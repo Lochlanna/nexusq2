@@ -14,14 +14,13 @@ extern crate alloc;
 extern crate std;
 
 mod cell;
-mod producer_tracker;
 mod receiver;
 mod sender;
 mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use producer_tracker::ProducerTracker;
+use std::sync::atomic::AtomicI64;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
@@ -60,7 +59,7 @@ impl FastMod for usize {
 struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
     buffer_raw: *mut cell::Cell<T>,
-    producer_tracker: ProducerTracker,
+    claimed: AtomicI64,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -79,8 +78,12 @@ impl<T> NexusQ<T> {
         Self {
             buffer,
             buffer_raw,
-            producer_tracker: ProducerTracker::default(),
+            claimed: AtomicI64::default(),
         }
+    }
+
+    pub(crate) fn get_claimed(&self) -> *const AtomicI64 {
+        std::ptr::addr_of!(self.claimed)
     }
 }
 
@@ -110,19 +113,8 @@ mod tests {
         assert_eq!(receiver.recv(), 3);
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
-    }
-
-    #[test]
-    fn cant_overwrite() {
-        let (mut sender, mut receiver) = make_channel(5);
-        sender.send(1);
-        sender.send(2);
-        sender.send(3);
-        sender.send(4);
-        sender.send(5);
-        assert_eq!(receiver.recv(), 1);
         sender.send(6);
-        assert!(!sender.try_send(7));
+        assert_eq!(receiver.recv(), 6);
     }
 }
 

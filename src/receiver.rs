@@ -15,24 +15,40 @@ impl<T> Receiver<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         let buffer_length = nexus.buffer.len();
         let buffer_raw = nexus.buffer_raw;
-        // Self::register(buffer_raw);
+        Self::register(buffer_raw);
         Self {
             nexus,
             buffer_raw,
             buffer_length,
-            cursor: -1,
+            cursor: 0,
         }
     }
     fn register(buffer: *mut Cell<T>) {
         unsafe {
-            (*buffer).move_to();
+            (*buffer).initial_queue_for_read();
         }
     }
 }
 
 impl<T> Clone for Receiver<T> {
     fn clone(&self) -> Self {
-        Self::new(Arc::clone(&self.nexus))
+        if self.cursor == 0 {
+            unsafe {
+                let cell = self.buffer_raw.add(self.cursor as usize);
+                (*cell).initial_queue_for_read();
+            }
+        } else {
+            unsafe {
+                let cell = self.buffer_raw.add(self.cursor as usize - 1);
+                (*cell).claim_for_read();
+            }
+        }
+        Self {
+            nexus: Arc::clone(&self.nexus),
+            buffer_raw: self.buffer_raw,
+            buffer_length: self.buffer_length,
+            cursor: self.cursor,
+        }
     }
 }
 
@@ -44,24 +60,18 @@ where
         unsafe { self.unsafe_recv() }
     }
     unsafe fn unsafe_recv(&mut self) -> T {
-        let old_index = (self.cursor as usize).fast_mod(self.buffer_length);
-
+        let previous_index = ((self.cursor - 1) as usize).fast_mod(self.buffer_length);
+        let current_index = (self.cursor as usize).fast_mod(self.buffer_length);
+        let current_cell = self.buffer_raw.add(current_index);
+        if self.cursor == 0 {
+            (*current_cell).wait_for_read();
+        } else {
+            let previous_cell = self.buffer_raw.add(previous_index);
+            (*current_cell).claim_for_read();
+            (*previous_cell).finish_read();
+        }
         self.cursor += 1;
-        let new_index = (self.cursor as usize).fast_mod(self.buffer_length);
-        let new_cell = self.buffer_raw.add(new_index);
 
-        (*new_cell).move_to();
-
-        if self.cursor > 0 {
-            let old_cell = self.buffer_raw.add(old_index);
-            (*old_cell).move_from();
-        }
-
-        let value;
-        unsafe {
-            value = (*new_cell).clone_value();
-        }
-
-        value
+        (*current_cell).read()
     }
 }

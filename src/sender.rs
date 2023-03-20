@@ -1,11 +1,11 @@
-use crate::producer_tracker::ProducerTracker;
 use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
-    producer_tracker: *const ProducerTracker,
+    claimed: *const AtomicI64,
     buffer_raw: *mut Cell<T>,
     buffer_length: i64,
     buffer_length_unsigned: usize,
@@ -17,11 +17,11 @@ impl<T> Sender<T> {
     pub(crate) fn new(nexus: Arc<NexusQ<T>>) -> Self {
         let buffer_length = nexus.buffer.len() as i64;
         let buffer_length_unsigned = nexus.buffer.len();
-        let producer_tracker = std::ptr::addr_of!(nexus.producer_tracker);
+        let claimed = nexus.get_claimed();
         let buffer_raw = nexus.buffer_raw;
         Self {
             nexus,
-            producer_tracker,
+            claimed,
             buffer_raw,
             buffer_length,
             buffer_length_unsigned,
@@ -45,46 +45,15 @@ where
         }
     }
     unsafe fn unsafe_send(&mut self, value: T) {
-        let claimed = (*self.producer_tracker).claim();
+        let claimed = (*self.claimed).fetch_add(1, Ordering::Relaxed);
         debug_assert!(claimed >= 0);
 
         let index = (claimed as usize).fast_mod(self.buffer_length_unsigned);
 
         let cell = self.buffer_raw.add(index);
 
-        if claimed >= self.buffer_length {
-            // this cell has been written to before so we will need to handle dropping it
-            (*cell).replace(value);
-        } else {
-            // this is uninit memory so we are safe to just overwrite it!
-            (*cell).write(value);
-        }
-
-        (*self.producer_tracker).publish(claimed);
-    }
-
-    pub fn try_send(&mut self, value: T) -> bool {
-        unsafe { self.try_unsafe_send(value) }
-    }
-    unsafe fn try_unsafe_send(&mut self, value: T) -> bool {
-        let claimed = (*self.producer_tracker).claim();
-        debug_assert!(claimed >= 0);
-
-        let index = (claimed as usize).fast_mod(self.buffer_length_unsigned);
-
-        let cell = self.buffer_raw.add(index);
-
-        if claimed >= self.buffer_length {
-            // this cell has been written to before so we will need to handle dropping it
-            if !(*cell).try_replace(value) {
-                return false;
-            }
-        } else {
-            // this is uninit memory so we are safe to just overwrite it!
-            (*cell).write(value);
-        }
-
-        (*self.producer_tracker).publish(claimed);
-        true
+        (*cell).claim_for_write();
+        (*cell).write(value);
+        (*cell).finish_write();
     }
 }
