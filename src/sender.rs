@@ -58,14 +58,13 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        (*cell).wait_for_write();
-
-        while (*self.tail)
-            .compare_exchange_weak(claimed - 1, claimed, Ordering::AcqRel, Ordering::Relaxed)
-            .is_err()
-        {
+        while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
             core::hint::spin_loop();
         }
+
+        (*cell).wait_for_write();
+
+        (*self.tail).store(claimed, Ordering::Release);
 
         (*cell).write(value);
 

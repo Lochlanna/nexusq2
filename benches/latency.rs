@@ -100,8 +100,8 @@ impl Display for RunParam {
 }
 
 fn throughput(c: &mut Criterion) {
-    let max_writers = 2;
-    let max_readers = 2;
+    let max_writers = 1;
+    let max_readers = 1;
 
     let pool = Pool::<ThunkWorker<Vec<Duration>>>::new(max_writers + max_readers);
     let (tx, mut rx) = std::sync::mpsc::channel();
@@ -119,15 +119,15 @@ fn throughput(c: &mut Criterion) {
                     });
                 },
             );
-            // group.bench_with_input(
-            //     BenchmarkId::new("multiq2", RunParam(input)),
-            //     &input,
-            //     |b, &input| {
-            //         b.iter_custom(|iters| {
-            //             black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
-            //         });
-            //     },
-            // );
+            group.bench_with_input(
+                BenchmarkId::new("multiq2", RunParam(input)),
+                &input,
+                |b, &input| {
+                    b.iter_custom(|iters| {
+                        black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
+                    });
+                },
+            );
             group.finish();
         }
     }

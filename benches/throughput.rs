@@ -104,13 +104,13 @@ impl Display for RunParam {
 
 fn throughput(c: &mut Criterion) {
     let num_elements = 20000;
-    let max_writers = 3;
+    let max_writers = 1;
     let max_readers = 1;
 
     let pool = Pool::<ThunkWorker<()>>::new(max_writers + max_readers);
     let (tx, mut rx) = std::sync::mpsc::channel();
 
-    for num_writers in 3..=max_writers {
+    for num_writers in 1..=max_writers {
         for num_readers in 1..=max_readers {
             let mut group = c.benchmark_group("throughput");
             let input = (num_writers, num_readers);

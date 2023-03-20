@@ -56,6 +56,7 @@ fn latency() {
 
 #[test]
 #[ignore]
+#[cfg(not(miri))]
 fn mq2_latency() {
     let mut total_duration = Duration::from_nanos(0);
     let (sender, receiver) = multiqueue2::broadcast_queue(100);
