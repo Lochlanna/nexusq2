@@ -58,13 +58,13 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
+        while (*self.tail).load(Ordering::Relaxed) < claimed - 1 {
             core::hint::spin_loop();
         }
 
         (*cell).wait_for_write();
 
-        (*self.tail).store(claimed, Ordering::Release);
+        (*self.tail).store(claimed, Ordering::Relaxed);
 
         (*cell).write(value);
 
@@ -73,7 +73,7 @@ where
         }
 
         while (*self.published)
-            .compare_exchange_weak(claimed - 1, claimed, Ordering::AcqRel, Ordering::Relaxed)
+            .compare_exchange_weak(claimed - 1, claimed, Ordering::Release, Ordering::Relaxed)
             .is_err()
         {
             core::hint::spin_loop();

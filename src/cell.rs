@@ -49,18 +49,18 @@ impl<T> Cell<T> {
     }
 
     pub fn finish_read(&self) {
-        let old = self.counter.fetch_sub(1, Ordering::SeqCst);
+        let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old > 0);
     }
 
     pub fn claim_for_read(&self) {
-        let old = self.counter.fetch_add(1, Ordering::SeqCst);
+        let old = self.counter.fetch_add(1, Ordering::Relaxed);
         debug_assert!(old >= 0);
     }
 
     pub fn initial_queue_for_read(&self) {
-        self.counter.fetch_sub(1, Ordering::SeqCst);
-        debug_assert!(self.counter.load(Ordering::SeqCst) < 0);
+        self.counter.fetch_sub(1, Ordering::Release);
+        debug_assert!(self.counter.load(Ordering::Acquire) < 0);
     }
 }
 

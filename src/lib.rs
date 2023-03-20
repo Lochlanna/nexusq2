@@ -20,7 +20,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::AtomicI64;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
@@ -86,24 +86,14 @@ impl<T> NexusQ<T> {
         }
     }
 
-    pub(crate) fn get_claimed(&self) -> *const AtomicI64 {
+    pub(crate) const fn get_claimed(&self) -> *const AtomicI64 {
         &self.claimed
     }
-    pub(crate) fn get_tail(&self) -> *const AtomicI64 {
+    pub(crate) const fn get_tail(&self) -> *const AtomicI64 {
         &self.tail
     }
-    pub(crate) fn get_published(&self) -> *const AtomicI64 {
+    pub(crate) const fn get_published(&self) -> *const AtomicI64 {
         &self.published
-    }
-
-    pub(crate) fn publish(&self, value: i64) {
-        while self
-            .published
-            .compare_exchange_weak(value - 1, value, Ordering::SeqCst, Ordering::Relaxed)
-            .is_err()
-        {
-            core::hint::spin_loop();
-        }
     }
 }
 

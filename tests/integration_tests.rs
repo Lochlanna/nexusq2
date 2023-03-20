@@ -47,11 +47,12 @@ fn two_sender_two_receiver_long() {
 fn latency() {
     let mut total_duration = Duration::from_nanos(0);
     let (mut sender, mut receiver) = make_channel(100);
-    for _ in 0..200 {
+    let num_sent = 300;
+    for _ in 0..num_sent {
         sender.send(Instant::now());
         total_duration += receiver.recv().elapsed();
     }
-    println!("that took, {}", total_duration.as_nanos() / 80);
+    println!("that took, {}", total_duration.as_nanos() / num_sent);
 }
 
 #[test]
@@ -60,11 +61,12 @@ fn latency() {
 fn mq2_latency() {
     let mut total_duration = Duration::from_nanos(0);
     let (sender, receiver) = multiqueue2::broadcast_queue(100);
-    for _ in 0..200 {
+    let num_sent = 300;
+    for _ in 0..num_sent {
         sender.try_send(Instant::now()).unwrap();
         total_duration += receiver.recv().unwrap().elapsed();
     }
-    println!("that took, {}", total_duration.as_nanos() / 80);
+    println!("that took, {}", total_duration.as_nanos() / num_sent);
 }
 
 #[test]
