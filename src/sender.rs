@@ -58,13 +58,13 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        while (*self.tail).load(Ordering::Relaxed) < claimed - 1 {
+        while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
             core::hint::spin_loop();
         }
 
         (*cell).wait_for_write();
 
-        (*self.tail).store(claimed, Ordering::Relaxed);
+        (*self.tail).store(claimed, Ordering::Release);
 
         (*cell).write(value);
 
