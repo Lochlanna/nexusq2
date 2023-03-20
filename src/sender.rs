@@ -59,7 +59,7 @@ where
             core::hint::spin_loop();
         }
 
-        (*cell).wait_for_write();
+        (*cell).wait_for_readers();
 
         (*self.tail).store(claimed, Ordering::Release);
 

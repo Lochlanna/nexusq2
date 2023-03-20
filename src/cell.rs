@@ -7,7 +7,6 @@ trait ToPositive {
 
 impl ToPositive for AtomicI64 {
     //TODO is there an optimisation that can be made here?
-    #[allow(clippy::cast_possible_wrap)]
     fn to_positive(&self) {
         while self
             .fetch_update(Ordering::Release, Ordering::Acquire, |v| Some(-v))
@@ -37,7 +36,7 @@ impl<T> Default for Cell<T> {
 }
 
 impl<T> Cell<T> {
-    pub fn wait_for_write(&self) {
+    pub fn wait_for_readers(&self) {
         while self.counter.load(Ordering::Acquire) > 0 {
             core::hint::spin_loop();
         }
@@ -56,11 +55,7 @@ impl<T> Cell<T> {
         drop(old_value);
     }
 
-    pub fn initial_finish_write(&self) {
-        debug_assert!(self.counter.load(Ordering::Acquire) < 0);
-    }
-
-    pub fn finish_read(&self) {
+    pub fn move_from(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old > 0);
     }
@@ -76,12 +71,12 @@ impl<T> Cell<T> {
         }
     }
 
-    pub fn claim_for_read(&self) {
+    pub fn move_to(&self) {
         let old = self.counter.fetch_add(1, Ordering::Relaxed);
         debug_assert!(old >= 0);
     }
 
-    pub fn initial_queue_for_read(&self) {
+    pub fn queue_for_read(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         debug_assert!(old <= 0);
     }

@@ -22,27 +22,26 @@ impl<T> Receiver<T> {
             buffer_raw,
             published_cache: -1,
             buffer_length,
-            cursor: 0,
+            cursor: -1,
         }
     }
     fn register(buffer: *mut Cell<T>) {
         unsafe {
-            (*buffer).initial_queue_for_read();
+            (*buffer).queue_for_read();
         }
     }
 }
 
 impl<T> Clone for Receiver<T> {
     fn clone(&self) -> Self {
-        if self.cursor == 0 {
+        if self.cursor < 1 {
             unsafe {
-                let cell = self.buffer_raw.add(self.cursor as usize);
-                (*cell).initial_queue_for_read();
+                (*self.buffer_raw).queue_for_read();
             }
         } else {
             unsafe {
                 let cell = self.buffer_raw.add(self.cursor as usize - 1);
-                (*cell).claim_for_read();
+                (*cell).move_to();
             }
         }
         Self {
@@ -63,18 +62,19 @@ where
         unsafe { self.unsafe_recv() }
     }
     unsafe fn unsafe_recv(&mut self) -> T {
-        let previous_index = ((self.cursor - 1) as usize).fast_mod(self.buffer_length);
+        let previous_index = (self.cursor as usize).fast_mod(self.buffer_length);
+        self.cursor += 1;
         let current_index = (self.cursor as usize).fast_mod(self.buffer_length);
+
         let current_cell = self.buffer_raw.add(current_index);
 
         (*current_cell).wait_for_published(self.cursor);
 
         if self.cursor > 0 {
-            (*current_cell).claim_for_read();
+            (*current_cell).move_to();
             let previous_cell = self.buffer_raw.add(previous_index);
-            (*previous_cell).finish_read();
+            (*previous_cell).move_from();
         }
-        self.cursor += 1;
 
         (*current_cell).read()
     }
