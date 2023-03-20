@@ -80,5 +80,13 @@ mod cell_tests {
     use pretty_assertions_sorted::assert_eq;
 
     #[test]
-    fn test_make_positive() {}
+    fn test_make_positive() {
+        for i in -10_000_000_i64..0 {
+            let value = AtomicI64::new(i);
+            let expected = i.abs();
+            value.to_positive();
+            let actual = value.load(Ordering::Relaxed);
+            assert_eq!(expected, actual);
+        }
+    }
 }
