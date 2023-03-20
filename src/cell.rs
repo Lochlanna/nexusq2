@@ -42,18 +42,17 @@ impl<T> Cell<T> {
         }
     }
 
-    pub fn write(&mut self, value: T) {
-        self.value = Some(value);
+    pub fn write_and_publish(&mut self, value: T, id: i64) {
+        let old_value = self.value.replace(value);
+        if id == 0 {
+            self.counter.to_positive();
+        }
+        self.current_id.store(id, Ordering::Release);
+        drop(old_value);
     }
 
     pub fn initial_finish_write(&self) {
         debug_assert!(self.counter.load(Ordering::Acquire) < 0);
-        self.counter.to_positive();
-    }
-
-    pub fn publish(&self, id: i64) {
-        debug_assert!(id > self.current_id.load(Ordering::Acquire));
-        self.current_id.store(id, Ordering::Release);
     }
 
     pub fn finish_read(&self) {

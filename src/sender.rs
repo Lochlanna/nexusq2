@@ -63,11 +63,6 @@ where
 
         (*self.tail).store(claimed, Ordering::Release);
 
-        (*cell).write(value);
-
-        if claimed == 0 {
-            (*cell).initial_finish_write();
-        }
-        (*cell).publish(claimed);
+        (*cell).write_and_publish(value, claimed);
     }
 }
