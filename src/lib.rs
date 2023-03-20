@@ -1,17 +1,13 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![allow(dead_code)]
 #![warn(future_incompatible)]
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![warn(clippy::cargo)]
+#![allow(dead_code)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 
 extern crate alloc;
-
-#[cfg(feature = "std")]
-extern crate std;
 
 mod cell;
 mod receiver;

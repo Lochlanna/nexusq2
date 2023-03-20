@@ -21,16 +21,6 @@ impl Hybrid {
 }
 
 impl Hybrid {
-    #[cfg(not(feature = "std"))]
-    fn wait_for_at_least<V: Waitable>(&self, variable: &V, min_value: V::BaseType) -> V::BaseType {
-        loop {
-            if let Some(v) = variable.at_least(min_value) {
-                return v;
-            }
-            core::hint::spin_loop();
-        }
-    }
-    #[cfg(feature = "std")]
     pub fn wait_for_at_least(&self, variable: &AtomicI64, min_value: i64) -> i64 {
         let mut current_value;
         for _ in 0..self.num_spin {
