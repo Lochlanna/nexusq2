@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 trait ToPositive {
@@ -19,7 +20,7 @@ impl ToPositive for AtomicI64 {
 
 #[derive(Debug)]
 pub struct Cell<T> {
-    value: Option<T>,
+    value: UnsafeCell<Option<T>>,
     counter: AtomicI64,
     current_id: AtomicI64,
 }
@@ -28,7 +29,7 @@ impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
         Self {
-            value: None,
+            value: UnsafeCell::new(None),
             counter: AtomicI64::new(0),
             current_id: AtomicI64::new(-1),
         }
@@ -42,8 +43,12 @@ impl<T> Cell<T> {
         }
     }
 
-    pub fn write_and_publish(&mut self, value: T, id: i64) {
-        let old_value = self.value.replace(value);
+    pub fn write_and_publish(&self, value: T, id: i64) {
+        let dst = self.value.get();
+        let old_value;
+        unsafe {
+            old_value = core::ptr::replace(dst, Some(value));
+        }
         if id == 0 {
             self.counter.to_positive();
         }
@@ -87,8 +92,7 @@ where
     T: Clone,
 {
     pub fn read(&self) -> T {
-        // hopefully this will compile down....
-        self.value.as_ref().unwrap().clone()
+        unsafe { (*self.value.get()).as_ref().unwrap().clone() }
     }
 }
 
