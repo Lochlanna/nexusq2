@@ -16,7 +16,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::AtomicI64;
 
 pub use receiver::Receiver;
 pub use sender::{Sender, TrySendError};

@@ -43,6 +43,7 @@ fn nexus(
     total_duration
 }
 
+#[allow(dead_code)]
 fn multiq2(
     num: usize,
     writers: usize,
