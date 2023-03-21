@@ -1,5 +1,5 @@
 use std::cell::UnsafeCell;
-use std::mem::MaybeUninit;
+use std::mem::forget;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 trait ToPositive {
@@ -17,26 +17,16 @@ impl ToPositive for AtomicI64 {
 
 #[derive(Debug)]
 pub struct Cell<T> {
-    value: UnsafeCell<MaybeUninit<T>>,
+    value: UnsafeCell<Option<T>>,
     counter: AtomicI64,
     current_id: AtomicI64,
-}
-
-impl<T> Drop for Cell<T> {
-    fn drop(&mut self) {
-        if self.should_drop() {
-            unsafe {
-                self.value.get_mut().assume_init_drop();
-            }
-        }
-    }
 }
 
 impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
         Self {
-            value: UnsafeCell::new(MaybeUninit::uninit()),
+            value: UnsafeCell::new(None),
             counter: AtomicI64::new(0),
             current_id: AtomicI64::new(-1),
         }
@@ -55,23 +45,23 @@ impl<T> Cell<T> {
     }
 
     pub fn write_and_publish(&self, value: T, id: i64) {
-        let old_id = self.current_id.load(Ordering::Relaxed);
-
-        let mut old_value = None;
+        let dst = self.value.get();
+        let old_value;
         unsafe {
-            let dst = (*self.value.get()).as_mut_ptr();
-            if old_id < 0 {
-                dst.write(value);
-            } else {
-                old_value = Some(core::ptr::replace(dst, value));
-            }
+            old_value = core::ptr::replace(dst, Some(value));
         }
-
         if id == 0 {
             self.counter.to_positive();
         }
-        self.current_id.store(id, Ordering::Release);
-        drop(old_value);
+        let old_id = self.current_id.swap(id, Ordering::Release);
+
+        if old_id < 0 {
+            forget(old_value);
+        } else {
+            unsafe {
+                drop(old_value.unwrap_unchecked());
+            }
+        }
     }
 
     pub fn move_from(&self) {
@@ -112,7 +102,7 @@ where
     T: Clone,
 {
     pub fn read(&self) -> T {
-        unsafe { (*(*self.value.get()).as_ptr()).clone() }
+        unsafe { (*self.value.get()).as_ref().unwrap_unchecked().clone() }
     }
 }
 
