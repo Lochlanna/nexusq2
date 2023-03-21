@@ -5,7 +5,6 @@ use alloc::sync::Arc;
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     buffer_raw: *mut Cell<T>,
-    published_cache: i64,
     buffer_length: usize,
     cursor: i64,
 }
@@ -20,7 +19,6 @@ impl<T> Receiver<T> {
         Self {
             nexus,
             buffer_raw,
-            published_cache: -1,
             buffer_length,
             cursor: -1,
         }
@@ -47,7 +45,6 @@ impl<T> Clone for Receiver<T> {
         Self {
             nexus: Arc::clone(&self.nexus),
             buffer_raw: self.buffer_raw,
-            published_cache: self.published_cache,
             buffer_length: self.buffer_length,
             cursor: self.cursor,
         }

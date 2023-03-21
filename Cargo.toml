@@ -12,7 +12,6 @@ fast-mod=[]
 [dependencies]
 parking_lot = "0.12.1"
 
-
 [dev-dependencies]
 criterion = { version = "0.4"}
 workerpool = "1.2"
@@ -33,10 +32,10 @@ incremental = false
 codegen-units = 1
 rpath = false
 
-#[profile.dev]
+[profile.dev]
 #opt-level = 1
 #debug = true
-#debug-assertions = false
+debug-assertions = false
 #overflow-checks = false
 #lto = false
 #panic = 'unwind'

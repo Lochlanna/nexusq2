@@ -55,6 +55,12 @@ where
 
         let cell = self.buffer_raw.add(index);
 
+        self.wait_for_readers(claimed, cell);
+
+        (*cell).write_and_publish(value, claimed);
+    }
+
+    unsafe fn wait_for_readers(&mut self, claimed: i64, cell: *mut Cell<T>) {
         while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
             core::hint::spin_loop();
         }
@@ -62,7 +68,5 @@ where
         (*cell).wait_for_readers();
 
         (*self.tail).store(claimed, Ordering::Release);
-
-        (*cell).write_and_publish(value, claimed);
     }
 }

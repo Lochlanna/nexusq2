@@ -8,12 +8,8 @@ trait ToPositive {
 impl ToPositive for AtomicI64 {
     //TODO is there an optimisation that can be made here?
     fn to_positive(&self) {
-        while self
-            .fetch_update(Ordering::Release, Ordering::Acquire, |v| Some(-v))
-            .is_err()
-        {
-            core::hint::spin_loop();
-        }
+        let res = self.fetch_update(Ordering::Release, Ordering::Acquire, |v| Some(-v));
+        debug_assert!(res.is_ok());
     }
 }
 
@@ -77,8 +73,15 @@ impl<T> Cell<T> {
     }
 
     pub fn queue_for_read(&self) {
-        let old = self.counter.fetch_sub(1, Ordering::Release);
-        debug_assert!(old <= 0);
+        self.counter
+            .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
+                if v <= 0 {
+                    Some(v - 1)
+                } else {
+                    Some(v + 1)
+                }
+            })
+            .expect("couldn't queue for read");
     }
 }
 
