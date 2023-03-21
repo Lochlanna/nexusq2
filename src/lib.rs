@@ -59,22 +59,6 @@ struct NexusQ<T> {
     tail: AtomicI64,
 }
 
-impl<T> Drop for NexusQ<T> {
-    fn drop(&mut self) {
-        if self.claimed.load(Ordering::SeqCst) >= self.buffer.len() as i64 {
-            // just do the drop!
-            return;
-        }
-        for cell in self.buffer.drain(..) {
-            if cell.should_drop() {
-                core::mem::drop(cell);
-            } else {
-                core::mem::forget(cell);
-            }
-        }
-    }
-}
-
 #[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for NexusQ<T> {}
 unsafe impl<T> Sync for NexusQ<T> {}

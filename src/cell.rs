@@ -1,5 +1,5 @@
 use std::cell::UnsafeCell;
-use std::mem::forget;
+use std::mem::{forget, MaybeUninit};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 trait ToPositive {
@@ -17,20 +17,28 @@ impl ToPositive for AtomicI64 {
 
 #[derive(Debug)]
 pub struct Cell<T> {
-    value: UnsafeCell<T>,
+    value: MaybeUninit<T>,
     counter: AtomicI64,
     current_id: AtomicI64,
+}
+
+impl<T> Drop for Cell<T> {
+    fn drop(&mut self) {
+        if self.should_drop() {
+            unsafe {
+                self.value.assume_init_drop();
+            }
+        }
+    }
 }
 
 impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
-        unsafe {
-            Self {
-                value: UnsafeCell::new(core::mem::MaybeUninit::zeroed().assume_init()),
-                counter: AtomicI64::new(0),
-                current_id: AtomicI64::new(-1),
-            }
+        Self {
+            value: MaybeUninit::uninit(),
+            counter: AtomicI64::new(0),
+            current_id: AtomicI64::new(-1),
         }
     }
 }
@@ -47,20 +55,22 @@ impl<T> Cell<T> {
     }
 
     pub fn write_and_publish(&self, value: T, id: i64) {
-        let dst = self.value.get();
-        let old_value;
-        unsafe {
-            old_value = core::ptr::replace(dst, value);
+        let old_id = self.current_id.load(Ordering::Relaxed);
+        let dst = self.value.as_ptr() as *mut T;
+        let mut old_value = None;
+        if old_id < 0 {
+            unsafe {
+                dst.write(value);
+            }
+        } else {
+            unsafe {
+                old_value = Some(core::ptr::replace(dst, value));
+            }
         }
         if id == 0 {
             self.counter.to_positive();
         }
-        let old = self.current_id.swap(id, Ordering::Release);
-        if old >= 0 {
-            drop(old_value);
-        } else {
-            forget(old_value);
-        }
+        self.current_id.store(id, Ordering::Release);
     }
 
     pub fn move_from(&self) {
@@ -101,7 +111,7 @@ where
     T: Clone,
 {
     pub fn read(&self) -> T {
-        unsafe { (*self.value.get()).clone() }
+        unsafe { (*self.value.as_ptr()).clone() }
     }
 }
 
