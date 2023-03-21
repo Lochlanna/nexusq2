@@ -16,7 +16,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 pub use receiver::Receiver;
 pub use sender::{Sender, TrySendError};
@@ -57,6 +57,22 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicI64,
     tail: AtomicI64,
+}
+
+impl<T> Drop for NexusQ<T> {
+    fn drop(&mut self) {
+        if self.claimed.load(Ordering::SeqCst) >= self.buffer.len() as i64 {
+            // just do the drop!
+            return;
+        }
+        for cell in self.buffer.drain(..) {
+            if cell.should_drop() {
+                core::mem::drop(cell);
+            } else {
+                core::mem::forget(cell);
+            }
+        }
+    }
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -164,18 +180,18 @@ mod drop_tests {
     #[test]
     fn valid_drop_full_buffer() {
         let counter = Arc::default();
-        let (mut sender, _) = make_channel(10);
-        for _ in 0..10 {
+        let (mut sender, _) = make_channel(16);
+        for _ in 0..16 {
             sender.send(CustomDropper::new(&counter));
         }
         drop(sender);
-        assert_eq!(counter.load(Ordering::Relaxed), 10);
+        assert_eq!(counter.load(Ordering::Relaxed), 16);
     }
 
     #[test]
     fn valid_drop_partial_buffer() {
         let counter = Arc::default();
-        let (mut sender, _) = make_channel(10);
+        let (mut sender, _) = make_channel(16);
         for _ in 0..3 {
             sender.send(CustomDropper::new(&counter));
         }

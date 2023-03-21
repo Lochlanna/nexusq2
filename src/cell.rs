@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::mem::forget;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 trait ToPositive {
@@ -7,6 +8,7 @@ trait ToPositive {
 
 impl ToPositive for AtomicI64 {
     //TODO is there an optimisation that can be made here?
+    #[cold]
     fn to_positive(&self) {
         let res = self.fetch_update(Ordering::Release, Ordering::Acquire, |v| Some(-v));
         debug_assert!(res.is_ok());
@@ -15,7 +17,7 @@ impl ToPositive for AtomicI64 {
 
 #[derive(Debug)]
 pub struct Cell<T> {
-    value: UnsafeCell<Option<T>>,
+    value: UnsafeCell<T>,
     counter: AtomicI64,
     current_id: AtomicI64,
 }
@@ -23,10 +25,12 @@ pub struct Cell<T> {
 impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
-        Self {
-            value: UnsafeCell::new(None),
-            counter: AtomicI64::new(0),
-            current_id: AtomicI64::new(-1),
+        unsafe {
+            Self {
+                value: UnsafeCell::new(core::mem::MaybeUninit::zeroed().assume_init()),
+                counter: AtomicI64::new(0),
+                current_id: AtomicI64::new(-1),
+            }
         }
     }
 }
@@ -37,6 +41,7 @@ impl<T> Cell<T> {
             core::hint::spin_loop();
         }
     }
+
     pub fn safe_to_write(&self) -> bool {
         self.counter.load(Ordering::Acquire) <= 0
     }
@@ -45,13 +50,17 @@ impl<T> Cell<T> {
         let dst = self.value.get();
         let old_value;
         unsafe {
-            old_value = core::ptr::replace(dst, Some(value));
+            old_value = core::ptr::replace(dst, value);
         }
         if id == 0 {
             self.counter.to_positive();
         }
-        self.current_id.store(id, Ordering::Release);
-        drop(old_value);
+        let old = self.current_id.swap(id, Ordering::Release);
+        if old >= 0 {
+            drop(old_value);
+        } else {
+            forget(old_value);
+        }
     }
 
     pub fn move_from(&self) {
@@ -60,12 +69,7 @@ impl<T> Cell<T> {
     }
 
     pub fn wait_for_published(&self, expected_published_id: i64) {
-        loop {
-            let published = self.current_id.load(Ordering::Acquire);
-            if published == expected_published_id {
-                break;
-            }
-            debug_assert!(published <= expected_published_id);
+        while self.current_id.load(Ordering::Acquire) != expected_published_id {
             core::hint::spin_loop();
         }
     }
@@ -86,6 +90,10 @@ impl<T> Cell<T> {
             })
             .expect("couldn't queue for read");
     }
+
+    pub fn should_drop(&self) -> bool {
+        self.current_id.load(Ordering::Acquire) >= 0
+    }
 }
 
 impl<T> Cell<T>
@@ -93,7 +101,7 @@ where
     T: Clone,
 {
     pub fn read(&self) -> T {
-        unsafe { (*self.value.get()).as_ref().unwrap().clone() }
+        unsafe { (*self.value.get()).clone() }
     }
 }
 
