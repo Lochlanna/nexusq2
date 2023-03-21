@@ -33,9 +33,12 @@ impl<T> Default for Cell<T> {
 
 impl<T> Cell<T> {
     pub fn wait_for_readers(&self) {
-        while self.counter.load(Ordering::Acquire) > 0 {
+        while !self.safe_to_write() {
             core::hint::spin_loop();
         }
+    }
+    pub fn safe_to_write(&self) -> bool {
+        self.counter.load(Ordering::Acquire) == 0
     }
 
     pub fn write_and_publish(&self, value: T, id: i64) {

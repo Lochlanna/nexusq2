@@ -2,6 +2,10 @@ use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
+pub enum SenderError<T> {
+    Full(T),
+}
+
 #[derive(Debug)]
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
@@ -47,6 +51,16 @@ where
             self.unsafe_send(value);
         }
     }
+
+    /// # Arguments
+    ///
+    /// * `value`: The value to be broadcast on the channel
+    ///
+    /// # Errors
+    /// * `SenderError::Full`: cannot put value onto queue as there's no free space
+    pub fn try_send(&mut self, value: T) -> Result<(), SenderError<T>> {
+        unsafe { self.try_unsafe_send(value) }
+    }
     unsafe fn unsafe_send(&mut self, value: T) {
         let claimed = (*self.claimed).fetch_add(1, Ordering::Relaxed);
         debug_assert!(claimed >= 0);
@@ -55,12 +69,6 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        self.wait_for_readers(claimed, cell);
-
-        (*cell).write_and_publish(value, claimed);
-    }
-
-    unsafe fn wait_for_readers(&mut self, claimed: i64, cell: *mut Cell<T>) {
         while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
             core::hint::spin_loop();
         }
@@ -68,5 +76,25 @@ where
         (*cell).wait_for_readers();
 
         (*self.tail).store(claimed, Ordering::Release);
+
+        (*cell).write_and_publish(value, claimed);
+    }
+
+    unsafe fn try_unsafe_send(&mut self, value: T) -> Result<(), SenderError<T>> {
+        let claimed = (*self.claimed).fetch_add(1, Ordering::Relaxed);
+        debug_assert!(claimed >= 0);
+
+        let index = (claimed as usize).fast_mod(self.buffer_length_unsigned);
+
+        let cell = self.buffer_raw.add(index);
+
+        if (*self.tail).load(Ordering::Acquire) < claimed - 1 || (*cell).safe_to_write() {
+            return Err(SenderError::Full(value));
+        }
+
+        (*self.tail).store(claimed, Ordering::Release);
+
+        (*cell).write_and_publish(value, claimed);
+        Ok(())
     }
 }
