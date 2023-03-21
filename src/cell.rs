@@ -50,17 +50,14 @@ impl<T> Cell<T> {
         unsafe {
             old_value = core::ptr::replace(dst, Some(value));
         }
-        if id == 0 {
-            self.counter.to_positive();
-        }
         let old_id = self.current_id.swap(id, Ordering::Release);
 
-        if old_id < 0 {
-            forget(old_value);
-        } else {
+        if old_id >= 0 {
             unsafe {
                 drop(old_value.unwrap_unchecked());
             }
+        } else {
+            forget(old_value);
         }
     }
 
@@ -78,22 +75,6 @@ impl<T> Cell<T> {
     pub fn move_to(&self) {
         let old = self.counter.fetch_add(1, Ordering::Relaxed);
         debug_assert!(old >= 0);
-    }
-
-    pub fn queue_for_read(&self) {
-        self.counter
-            .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
-                if v <= 0 {
-                    Some(v - 1)
-                } else {
-                    Some(v + 1)
-                }
-            })
-            .expect("couldn't queue for read");
-    }
-
-    pub fn should_drop(&self) -> bool {
-        self.current_id.load(Ordering::Acquire) >= 0
     }
 }
 
