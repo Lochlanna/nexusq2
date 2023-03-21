@@ -74,8 +74,8 @@ impl<T> NexusQ<T> {
         Self {
             buffer,
             buffer_raw,
-            claimed: AtomicI64::default(),
-            tail: AtomicI64::new(-1),
+            claimed: AtomicI64::new(1),
+            tail: AtomicI64::new(0),
         }
     }
 
@@ -102,36 +102,46 @@ mod tests {
 
     #[test]
     fn basic_channel_test() {
-        let (mut sender, mut receiver) = make_channel(5);
+        let (mut sender, mut receiver) = make_channel(4);
         sender.send(1);
         sender.send(2);
         sender.send(3);
-        sender.send(4);
-        sender.send(5);
         assert_eq!(receiver.recv(), 1);
         assert_eq!(receiver.recv(), 2);
         assert_eq!(receiver.recv(), 3);
+        sender.send(4);
+        sender.send(5);
+        sender.send(6);
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
-        sender.send(6);
         assert_eq!(receiver.recv(), 6);
     }
 
     #[test]
     fn basic_channel_test_try() {
-        let (mut sender, mut receiver) = make_channel(5);
+        let (mut sender, mut receiver) = make_channel(4);
+        sender.try_send(1).unwrap();
+        sender.try_send(2).unwrap();
+        sender.try_send(3).unwrap();
+        assert_eq!(receiver.recv(), 1);
+        assert_eq!(receiver.recv(), 2);
+        assert_eq!(receiver.recv(), 3);
+        sender.try_send(4).unwrap();
+        sender.try_send(5).unwrap();
+        sender.try_send(6).unwrap();
+        assert_eq!(receiver.recv(), 4);
+        assert_eq!(receiver.recv(), 5);
+        assert_eq!(receiver.recv(), 6);
+    }
+
+    #[test]
+    #[should_panic]
+    fn try_send_to_full_fails() {
+        let (mut sender, _) = make_channel(4);
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
         sender.try_send(3).unwrap();
         sender.try_send(4).unwrap();
-        sender.try_send(5).unwrap();
-        assert_eq!(receiver.recv(), 1);
-        assert_eq!(receiver.recv(), 2);
-        assert_eq!(receiver.recv(), 3);
-        assert_eq!(receiver.recv(), 4);
-        assert_eq!(receiver.recv(), 5);
-        sender.try_send(6).unwrap();
-        assert_eq!(receiver.recv(), 6);
     }
 }
 
@@ -164,12 +174,15 @@ mod drop_tests {
     #[test]
     fn valid_drop_full_buffer() {
         let counter = Arc::default();
-        let (mut sender, _) = make_channel(16);
-        for _ in 0..16 {
+        let (mut sender, mut receiver) = make_channel(16);
+        for _ in 0..15 {
             sender.send(CustomDropper::new(&counter));
         }
+        receiver.recv();
+        sender.send(CustomDropper::new(&counter));
+        drop(receiver);
         drop(sender);
-        assert_eq!(counter.load(Ordering::Relaxed), 16);
+        assert_eq!(counter.load(Ordering::Relaxed), 17);
     }
 
     #[test]
@@ -196,24 +209,22 @@ mod drop_tests {
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
+        receiver.recv();
+        receiver.recv();
+        receiver.recv();
+        assert_eq!(counter.load(Ordering::Acquire), 3);
         sender.send(CustomDropper::new(&counter));
-        receiver.recv();
-        receiver.recv();
-        receiver.recv();
-        receiver.recv();
+        assert_eq!(counter.load(Ordering::Acquire), 3);
+        sender.send(CustomDropper::new(&counter));
         assert_eq!(counter.load(Ordering::Acquire), 4);
         sender.send(CustomDropper::new(&counter));
         assert_eq!(counter.load(Ordering::Acquire), 5);
-        sender.send(CustomDropper::new(&counter));
-        assert_eq!(counter.load(Ordering::Acquire), 6);
-        sender.send(CustomDropper::new(&counter));
-        assert_eq!(counter.load(Ordering::Acquire), 7);
         //TODO fix this so that it can be filled!
         // sender.send(CustomDropper::new(&counter));
         // assert_eq!(counter.load(Ordering::Relaxed), 8);
         drop(sender);
         drop(receiver);
-        assert_eq!(counter.load(Ordering::Acquire), 11);
+        assert_eq!(counter.load(Ordering::Acquire), 9);
     }
 }
 

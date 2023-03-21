@@ -74,9 +74,7 @@ where
             core::hint::spin_loop();
         }
 
-        if claimed > 0 {
-            (*cell).wait_for_readers();
-        }
+        (*cell).wait_for_readers();
 
         (*self.tail).store(claimed, Ordering::Release);
 
@@ -91,9 +89,7 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        if (*self.tail).load(Ordering::Acquire) != claimed - 1
-            || (claimed > 0 && !(*cell).safe_to_write())
-        {
+        if (*self.tail).load(Ordering::Acquire) != claimed - 1 || !(*cell).safe_to_write() {
             return Err(TrySendError::Full(value));
         }
 

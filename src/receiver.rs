@@ -21,7 +21,7 @@ impl<T> Receiver<T> {
             nexus,
             buffer_raw,
             buffer_length,
-            cursor: 0,
+            cursor: 1,
             previous_cell: buffer_raw,
         }
     }
