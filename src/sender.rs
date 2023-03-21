@@ -2,7 +2,8 @@ use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-pub enum SenderError<T> {
+#[derive(Debug)]
+pub enum TrySendError<T> {
     Full(T),
 }
 
@@ -58,7 +59,7 @@ where
     ///
     /// # Errors
     /// * `SenderError::Full`: cannot put value onto queue as there's no free space
-    pub fn try_send(&mut self, value: T) -> Result<(), SenderError<T>> {
+    pub fn try_send(&mut self, value: T) -> Result<(), TrySendError<T>> {
         unsafe { self.try_unsafe_send(value) }
     }
     unsafe fn unsafe_send(&mut self, value: T) {
@@ -69,7 +70,7 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        while (*self.tail).load(Ordering::Acquire) < claimed - 1 {
+        while (*self.tail).load(Ordering::Acquire) != claimed - 1 {
             core::hint::spin_loop();
         }
 
@@ -80,7 +81,7 @@ where
         (*cell).write_and_publish(value, claimed);
     }
 
-    unsafe fn try_unsafe_send(&mut self, value: T) -> Result<(), SenderError<T>> {
+    unsafe fn try_unsafe_send(&mut self, value: T) -> Result<(), TrySendError<T>> {
         let claimed = (*self.claimed).fetch_add(1, Ordering::Relaxed);
         debug_assert!(claimed >= 0);
 
@@ -88,8 +89,8 @@ where
 
         let cell = self.buffer_raw.add(index);
 
-        if (*self.tail).load(Ordering::Acquire) < claimed - 1 || (*cell).safe_to_write() {
-            return Err(SenderError::Full(value));
+        if (*self.tail).load(Ordering::Acquire) != claimed - 1 || !(*cell).safe_to_write() {
+            return Err(TrySendError::Full(value));
         }
 
         (*self.tail).store(claimed, Ordering::Release);

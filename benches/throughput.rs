@@ -32,9 +32,10 @@ fn nexus(
     rx: &mut std::sync::mpsc::Receiver<()>,
     iters: u64,
 ) -> Duration {
+    let size = 100_u64.next_power_of_two();
     let mut total_duration = Duration::new(0, 0);
     for _ in 0..iters {
-        let (sender, receiver) = make_channel(100);
+        let (sender, receiver) = make_channel(size.try_into().unwrap());
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
     }
@@ -53,9 +54,10 @@ fn multiq2(
 ) -> Duration {
     let mut total_duration = Duration::new(0, 0);
     for _ in 0..iters {
+        let size = 100_u64.next_power_of_two();
         // let (sender, receiver) = multiqueue2::broadcast_queue(100);
         let (sender, receiver) =
-            multiqueue2::broadcast_queue_with(100, multiqueue2::wait::BusyWait::default());
+            multiqueue2::broadcast_queue_with(size, multiqueue2::wait::BusyWait::default());
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
     }

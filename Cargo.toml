@@ -33,15 +33,15 @@ codegen-units = 1
 rpath = false
 
 [profile.dev]
-#opt-level = 1
-#debug = true
+opt-level = 1
+debug = true
 debug-assertions = false
-#overflow-checks = false
-#lto = false
-#panic = 'unwind'
-#incremental = true
-#codegen-units = 16
-#rpath = false
+overflow-checks = false
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 16
+rpath = false
 
 
 [[bench]]

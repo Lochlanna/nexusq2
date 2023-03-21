@@ -35,11 +35,13 @@ fn nexus(
     tx: &std::sync::mpsc::Sender<Vec<Duration>>,
     rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
 ) -> Duration {
-    let (sender, receiver) = make_channel(100);
+    let size = 100_u64.next_power_of_two();
+    let (sender, receiver) = make_channel(size.try_into().unwrap());
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
 }
 
+#[allow(dead_code)]
 fn multiq2(
     iterations: u64,
     writers: usize,
@@ -48,7 +50,8 @@ fn multiq2(
     tx: &std::sync::mpsc::Sender<Vec<Duration>>,
     rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
 ) -> Duration {
-    let (sender, receiver) = multiqueue2::broadcast_queue(100);
+    let size = 100_u64.next_power_of_two();
+    let (sender, receiver) = multiqueue2::broadcast_queue(size);
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
 }

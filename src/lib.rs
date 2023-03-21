@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use std::sync::atomic::AtomicI64;
 
 pub use receiver::Receiver;
-pub use sender::Sender;
+pub use sender::{Sender, TrySendError};
 
 pub trait FastMod {
     #[must_use]
@@ -114,6 +114,23 @@ mod tests {
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
         sender.send(6);
+        assert_eq!(receiver.recv(), 6);
+    }
+
+    #[test]
+    fn basic_channel_test_try() {
+        let (mut sender, mut receiver) = make_channel(5);
+        sender.try_send(1).unwrap();
+        sender.try_send(2).unwrap();
+        sender.try_send(3).unwrap();
+        sender.try_send(4).unwrap();
+        sender.try_send(5).unwrap();
+        assert_eq!(receiver.recv(), 1);
+        assert_eq!(receiver.recv(), 2);
+        assert_eq!(receiver.recv(), 3);
+        assert_eq!(receiver.recv(), 4);
+        assert_eq!(receiver.recv(), 5);
+        sender.try_send(6).unwrap();
         assert_eq!(receiver.recv(), 6);
     }
 }
