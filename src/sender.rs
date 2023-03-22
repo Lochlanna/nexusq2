@@ -111,7 +111,8 @@ impl<T> Sender<T> {
     }
 
     unsafe fn wait_for_write(&self, claimed: usize, cell: *mut Cell<T>) {
-        (*self.nexus_details.tail_wait_strategy).wait_for(&(*self.nexus_details.tail), claimed - 1);
+        let target = claimed.wrapping_sub(1);
+        (*self.nexus_details.tail_wait_strategy).wait_for(&(*self.nexus_details.tail), target);
 
         (*cell).wait_for_write_safe();
 
@@ -125,9 +126,10 @@ impl<T> Sender<T> {
         cell: *mut Cell<T>,
         deadline: Instant,
     ) -> Result<(), SendError<T>> {
+        let target = claimed.wrapping_sub(1);
         (*self.nexus_details.tail_wait_strategy).wait_until(
             &(*self.nexus_details.tail),
-            claimed - 1,
+            target,
             deadline,
         )?;
 
@@ -139,8 +141,8 @@ impl<T> Sender<T> {
     }
 
     unsafe fn try_wait(&self, claimed: usize, cell: *mut Cell<T>) -> bool {
-        if (*self.nexus_details.tail).load(Ordering::Acquire) != claimed - 1
-            || !(*cell).safe_to_write()
+        let target = claimed.wrapping_sub(1);
+        if (*self.nexus_details.tail).load(Ordering::Acquire) != target || !(*cell).safe_to_write()
         {
             return false;
         }

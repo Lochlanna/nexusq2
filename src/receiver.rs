@@ -99,13 +99,13 @@ where
         (*self.previous_cell).move_from();
 
         self.previous_cell = current_cell;
-        self.cursor += 1;
+        self.cursor = self.cursor.wrapping_add(1);
 
         (*current_cell).read()
     }
 
     unsafe fn get_current_cell(&mut self) -> *mut Cell<T> {
-        let current_index = (self.cursor as usize).fast_mod(self.nexus_details.buffer_length);
+        let current_index = self.cursor.fast_mod(self.nexus_details.buffer_length);
         self.nexus_details.buffer_raw.add(current_index)
     }
 }
