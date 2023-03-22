@@ -57,8 +57,10 @@ fn multiq2(
     for _ in 0..iters {
         let size = 100_u64.next_power_of_two();
         // let (sender, receiver) = multiqueue2::broadcast_queue(100);
-        let (sender, receiver) =
-            multiqueue2::broadcast_queue_with(size, multiqueue2::wait::BusyWait::default());
+        let (sender, receiver) = multiqueue2::broadcast_queue_with(
+            size,
+            multiqueue2::wait::BlockingWait::with_spins(100000, 0),
+        );
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
     }

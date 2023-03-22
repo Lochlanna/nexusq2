@@ -1,3 +1,4 @@
+use crate::wait_strategy::HybridWait;
 use crate::{cell::Cell, FastMod, NexusQ};
 use alloc::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -12,6 +13,7 @@ pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
     claimed: *const AtomicI64,
     tail: *const AtomicI64,
+    tail_wait_strategy: *const HybridWait,
     buffer_raw: *mut Cell<T>,
     buffer_length: i64,
     buffer_length_unsigned: usize,
@@ -25,11 +27,13 @@ impl<T> Sender<T> {
         let buffer_length_unsigned = nexus.buffer.len();
         let claimed = nexus.get_claimed();
         let tail = nexus.get_tail();
+        let tail_wait_strategy = nexus.get_tail_wait_strategy();
         let buffer_raw = nexus.buffer_raw;
         Self {
             nexus,
             claimed,
             tail,
+            tail_wait_strategy,
             buffer_raw,
             buffer_length,
             buffer_length_unsigned,
@@ -76,13 +80,12 @@ where
     }
 
     unsafe fn wait_for_write(&mut self, claimed: i64, cell: *mut Cell<T>) {
-        while (*self.tail).load(Ordering::Acquire) != claimed - 1 {
-            core::hint::spin_loop();
-        }
+        (*self.tail_wait_strategy).wait_for(&(*self.tail), claimed - 1);
 
         (*cell).wait_for_readers();
 
         (*self.tail).store(claimed, Ordering::Release);
+        (*self.tail_wait_strategy).notify();
     }
 
     unsafe fn try_unsafe_send(&mut self, value: T) -> Result<(), TrySendError<T>> {
@@ -98,6 +101,7 @@ where
         }
 
         (*self.tail).store(claimed, Ordering::Release);
+        (*self.tail_wait_strategy).notify();
 
         (*cell).write_and_publish(value, claimed);
         Ok(())

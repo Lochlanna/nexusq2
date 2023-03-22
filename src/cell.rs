@@ -1,3 +1,4 @@
+use crate::wait_strategy::HybridWait;
 use core::fmt::Debug;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -20,6 +21,7 @@ pub struct Cell<T> {
     value: UnsafeCell<Option<T>>,
     counter: AtomicI64,
     current_id: AtomicI64,
+    wait_strategy: HybridWait,
 }
 
 impl<T> Default for Cell<T> {
@@ -29,15 +31,14 @@ impl<T> Default for Cell<T> {
             value: UnsafeCell::new(None),
             counter: AtomicI64::new(0),
             current_id: AtomicI64::new(-1),
+            wait_strategy: HybridWait::default(),
         }
     }
 }
 
 impl<T> Cell<T> {
     pub fn wait_for_readers(&self) {
-        while !self.safe_to_write() {
-            core::hint::spin_loop();
-        }
+        self.wait_strategy.wait_for(&self.counter, 0);
     }
 
     pub fn safe_to_write(&self) -> bool {
@@ -48,18 +49,19 @@ impl<T> Cell<T> {
         let dst = self.value.get();
         let old_value = core::ptr::replace(dst, Some(value));
         self.current_id.store(id, Ordering::Release);
+        self.wait_strategy.notify();
         drop(old_value);
     }
 
     pub fn move_from(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old > 0);
+        self.wait_strategy.notify();
     }
 
     pub fn wait_for_published(&self, expected_published_id: i64) {
-        while self.current_id.load(Ordering::Acquire) != expected_published_id {
-            core::hint::spin_loop();
-        }
+        self.wait_strategy
+            .wait_for(&self.current_id, expected_published_id);
     }
 
     pub fn move_to(&self) {

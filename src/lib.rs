@@ -18,6 +18,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use std::sync::atomic::AtomicI64;
 
+use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;
 pub use sender::{Sender, TrySendError};
 
@@ -57,6 +58,7 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicI64,
     tail: AtomicI64,
+    tail_wait_strategy: HybridWait,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -76,6 +78,7 @@ impl<T> NexusQ<T> {
             buffer_raw,
             claimed: AtomicI64::new(1),
             tail: AtomicI64::new(0),
+            tail_wait_strategy: HybridWait::default(),
         }
     }
 
@@ -84,6 +87,9 @@ impl<T> NexusQ<T> {
     }
     pub(crate) const fn get_tail(&self) -> *const AtomicI64 {
         &self.tail
+    }
+    pub(crate) const fn get_tail_wait_strategy(&self) -> *const HybridWait {
+        &self.tail_wait_strategy
     }
 }
 
