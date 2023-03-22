@@ -1,5 +1,5 @@
+use core::fmt::Debug;
 use std::cell::UnsafeCell;
-use std::mem::forget;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 trait ToPositive {
@@ -16,8 +16,26 @@ impl ToPositive for AtomicI64 {
 }
 
 #[derive(Debug)]
+enum CustomOption<T> {
+    Some(T),
+    None,
+}
+
+impl<T> CustomOption<T>
+where
+    T: Clone,
+{
+    pub unsafe fn unchecked_clone_inner(&self) -> T {
+        match self {
+            Self::Some(value) => value.clone(),
+            Self::None => core::hint::unreachable_unchecked(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Cell<T> {
-    value: UnsafeCell<Option<T>>,
+    value: UnsafeCell<CustomOption<T>>,
     counter: AtomicI64,
     current_id: AtomicI64,
 }
@@ -26,7 +44,7 @@ impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
         Self {
-            value: UnsafeCell::new(None),
+            value: UnsafeCell::new(CustomOption::None),
             counter: AtomicI64::new(0),
             current_id: AtomicI64::new(-1),
         }
@@ -44,21 +62,11 @@ impl<T> Cell<T> {
         self.counter.load(Ordering::Acquire) <= 0
     }
 
-    pub fn write_and_publish(&self, value: T, id: i64) {
+    pub unsafe fn write_and_publish(&self, value: T, id: i64) {
         let dst = self.value.get();
-        let old_value;
-        unsafe {
-            old_value = core::ptr::replace(dst, Some(value));
-        }
-        let old_id = self.current_id.swap(id, Ordering::Release);
-
-        if old_id >= 0 {
-            unsafe {
-                drop(old_value.unwrap_unchecked());
-            }
-        } else {
-            forget(old_value);
-        }
+        let old_value = core::ptr::replace(dst, CustomOption::Some(value));
+        self.current_id.store(id, Ordering::Release);
+        drop(old_value);
     }
 
     pub fn move_from(&self) {
@@ -82,8 +90,8 @@ impl<T> Cell<T>
 where
     T: Clone,
 {
-    pub fn read(&self) -> T {
-        unsafe { (*self.value.get()).as_ref().unwrap_unchecked().clone() }
+    pub unsafe fn read(&self) -> T {
+        (*self.value.get()).unchecked_clone_inner()
     }
 }
 
