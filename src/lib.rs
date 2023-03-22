@@ -52,6 +52,18 @@ impl FastMod for usize {
     }
 }
 
+impl FastMod for u64 {
+    fn fast_mod(&self, denominator: Self) -> Self {
+        debug_assert!(denominator > 0);
+        debug_assert!(denominator.is_power_of_two());
+        *self & (denominator - 1)
+    }
+
+    fn maybe_next_power_of_two(&self) -> Self {
+        self.next_power_of_two()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NexusDetails<T> {
     claimed: *const AtomicI64,
