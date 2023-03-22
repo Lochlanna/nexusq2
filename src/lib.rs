@@ -16,7 +16,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::AtomicUsize;
 
 use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;
@@ -66,8 +66,8 @@ impl FastMod for u64 {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NexusDetails<T> {
-    claimed: *const AtomicI64,
-    tail: *const AtomicI64,
+    claimed: *const AtomicUsize,
+    tail: *const AtomicUsize,
     tail_wait_strategy: *const HybridWait,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
@@ -79,8 +79,8 @@ unsafe impl<T> Send for NexusDetails<T> {}
 struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
     buffer_raw: *mut cell::Cell<T>,
-    claimed: AtomicI64,
-    tail: AtomicI64,
+    claimed: AtomicUsize,
+    tail: AtomicUsize,
     tail_wait_strategy: HybridWait,
 }
 
@@ -99,8 +99,8 @@ impl<T> NexusQ<T> {
         Self {
             buffer,
             buffer_raw,
-            claimed: AtomicI64::new(1),
-            tail: AtomicI64::new(0),
+            claimed: AtomicUsize::new(1),
+            tail: AtomicUsize::new(0),
             tail_wait_strategy: HybridWait::default(),
         }
     }

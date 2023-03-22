@@ -101,17 +101,16 @@ where
 }
 
 impl<T> Sender<T> {
-    unsafe fn shared_setup(&self) -> (i64, *mut Cell<T>) {
+    unsafe fn shared_setup(&self) -> (usize, *mut Cell<T>) {
         let claimed = (*self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
-        debug_assert!(claimed >= 0);
 
-        let index = (claimed as usize).fast_mod(self.nexus_details.buffer_length);
+        let index = claimed.fast_mod(self.nexus_details.buffer_length);
 
         let cell = self.nexus_details.buffer_raw.add(index);
         (claimed, cell)
     }
 
-    unsafe fn wait_for_write(&self, claimed: i64, cell: *mut Cell<T>) {
+    unsafe fn wait_for_write(&self, claimed: usize, cell: *mut Cell<T>) {
         (*self.nexus_details.tail_wait_strategy).wait_for(&(*self.nexus_details.tail), claimed - 1);
 
         (*cell).wait_for_write_safe();
@@ -122,7 +121,7 @@ impl<T> Sender<T> {
 
     unsafe fn wait_for_write_until(
         &self,
-        claimed: i64,
+        claimed: usize,
         cell: *mut Cell<T>,
         deadline: Instant,
     ) -> Result<(), SendError<T>> {
@@ -139,7 +138,7 @@ impl<T> Sender<T> {
         Ok(())
     }
 
-    unsafe fn try_wait(&self, claimed: i64, cell: *mut Cell<T>) -> bool {
+    unsafe fn try_wait(&self, claimed: usize, cell: *mut Cell<T>) -> bool {
         if (*self.nexus_details.tail).load(Ordering::Acquire) != claimed - 1
             || !(*cell).safe_to_write()
         {

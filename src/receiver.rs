@@ -13,7 +13,7 @@ pub enum Error {
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,
-    cursor: i64,
+    cursor: usize,
     previous_cell: *mut Cell<T>,
 }
 

@@ -1,6 +1,5 @@
 use crate::FastMod;
-use core::sync::atomic::AtomicI64;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
@@ -34,7 +33,7 @@ impl Default for HybridWait {
 }
 
 impl HybridWait {
-    pub fn wait_for(&self, variable: &AtomicI64, expected: i64) {
+    pub fn wait_for(&self, variable: &AtomicUsize, expected: usize) {
         for _ in 0..self.num_spin {
             if variable.load(Ordering::Acquire) == expected {
                 return;
@@ -61,8 +60,8 @@ impl HybridWait {
 
     pub fn wait_until(
         &self,
-        variable: &AtomicI64,
-        expected: i64,
+        variable: &AtomicUsize,
+        expected: usize,
         deadline: Instant,
     ) -> Result<(), WaitError> {
         for n in 0..self.num_spin {
