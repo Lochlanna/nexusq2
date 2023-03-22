@@ -32,7 +32,7 @@ where
             let res = self.recv();
             match res {
                 Ok(v) => return v,
-                Err(_) => continue,
+                Err(_) => panic!("receiver panic multiqueue2"),
             }
         }
     }

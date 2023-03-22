@@ -3,6 +3,7 @@ use shared::*;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::fmt::{Display, Formatter};
+use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
 
 use nexusq2::make_channel;
@@ -17,10 +18,11 @@ fn read_n(mut receiver: impl TestReceiver<usize> + 'static, num_to_read: usize) 
 }
 
 #[inline(always)]
-fn write_n(mut sender: impl TestSender<usize> + 'static, num_to_write: usize) {
+fn write_n<S: TestSender<usize> + 'static>(mut sender: S, num_to_write: usize) -> S {
     for i in 0..num_to_write {
         sender.test_send(i);
     }
+    sender
 }
 
 fn nexus(
@@ -88,16 +90,21 @@ fn run_test(
         pool.execute_to(tx.clone(), Thunk::of(move || read_n(r, num * writers)))
     }
 
-    let senders: Vec<_> = senders
-        .into_iter()
-        .map(|s| Thunk::of(move || write_n(s, num)))
-        .collect();
+    let sender_barrier = Arc::new(Barrier::new(writers + 1));
+    let sender_thunks = senders.into_iter().map(|s| {
+        let barrier = Arc::clone(&sender_barrier);
+        Thunk::of(move || {
+            let s = write_n(s, num);
+            barrier.wait();
+            drop(s);
+        })
+    });
     let start = Instant::now();
-    for s in senders {
-        pool.execute(s)
-    }
+    sender_thunks.for_each(|thunk| pool.execute(thunk));
+
     let results = rx.iter().take(readers).count();
     let duration = start.elapsed();
+    sender_barrier.wait();
     assert_eq!(results, readers);
     duration
 }

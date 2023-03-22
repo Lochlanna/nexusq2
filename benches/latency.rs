@@ -3,6 +3,7 @@ use shared::*;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::fmt::{Display, Formatter};
+use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
 
 use nexusq2::make_channel;
@@ -10,30 +11,30 @@ use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
 
 #[inline(always)]
-fn read_n(mut receiver: impl TestReceiver<Instant> + 'static, num_to_read: usize) -> Vec<Duration> {
-    let mut latencies = Vec::with_capacity(num_to_read);
+fn read_n(mut receiver: impl TestReceiver<Instant> + 'static, num_to_read: usize) -> Duration {
+    let mut total_latency = Duration::default();
     for _ in 0..num_to_read {
         let latency = receiver.test_recv().elapsed();
-        latencies.push(latency);
+        total_latency += latency;
     }
-    latencies
+    total_latency
 }
 
 #[inline(always)]
-fn write_n(mut sender: impl TestSender<Instant> + 'static, num_to_write: usize) -> Vec<Duration> {
+fn write_n<S: TestSender<Instant> + 'static>(mut sender: S, num_to_write: usize) -> (Duration, S) {
     for _ in 0..num_to_write {
         sender.test_send(Instant::now());
     }
-    Default::default()
+    (Default::default(), sender)
 }
 
 fn nexus(
     iterations: u64,
     writers: usize,
     readers: usize,
-    pool: &Pool<ThunkWorker<Vec<Duration>>>,
-    tx: &std::sync::mpsc::Sender<Vec<Duration>>,
-    rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
+    pool: &Pool<ThunkWorker<Duration>>,
+    tx: &std::sync::mpsc::Sender<Duration>,
+    rx: &mut std::sync::mpsc::Receiver<Duration>,
 ) -> Duration {
     let size = 100_u64.next_power_of_two();
     let (sender, receiver) = make_channel(size.try_into().unwrap());
@@ -46,9 +47,9 @@ fn multiq2(
     iterations: u64,
     writers: usize,
     readers: usize,
-    pool: &Pool<ThunkWorker<Vec<Duration>>>,
-    tx: &std::sync::mpsc::Sender<Vec<Duration>>,
-    rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
+    pool: &Pool<ThunkWorker<Duration>>,
+    tx: &std::sync::mpsc::Sender<Duration>,
+    rx: &mut std::sync::mpsc::Receiver<Duration>,
 ) -> Duration {
     let size = 100_u64.next_power_of_two();
     let (sender, receiver) = multiqueue2::broadcast_queue_with(
@@ -64,9 +65,9 @@ fn run_test(
     iterations: u64,
     writers: usize,
     readers: usize,
-    pool: &Pool<ThunkWorker<Vec<Duration>>>,
-    tx: &std::sync::mpsc::Sender<Vec<Duration>>,
-    rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
+    pool: &Pool<ThunkWorker<Duration>>,
+    tx: &std::sync::mpsc::Sender<Duration>,
+    rx: &mut std::sync::mpsc::Receiver<Duration>,
     sender: impl TestSender<Instant> + 'static,
     receiver: impl TestReceiver<Instant> + 'static,
 ) -> Duration {
@@ -84,18 +85,22 @@ fn run_test(
         )
     }
 
-    let senders: Vec<_> = senders
-        .into_iter()
-        .map(|s| Thunk::of(move || write_n(s, iterations as usize)))
-        .collect();
-    for s in senders {
-        pool.execute(s)
-    }
-    rx.iter()
-        .take(readers)
-        .map(|r| r.into_iter().sum::<Duration>().div_f64(writers as f64))
-        .sum::<Duration>()
-        .div_f64(readers as f64)
+    let sender_barrier = Arc::new(Barrier::new(writers + 1));
+    let sender_thunks = senders.into_iter().map(|s| {
+        let barrier = Arc::clone(&sender_barrier);
+        Thunk::of(move || {
+            let (res, s) = write_n(s, iterations as usize);
+            barrier.wait();
+            drop(s);
+            res
+        })
+    });
+    sender_thunks.for_each(|thunk| pool.execute(thunk));
+
+    let total_latency: Duration = rx.iter().take(readers).sum();
+    sender_barrier.wait();
+
+    total_latency.div_f64((total_num_messages * (readers as u64)) as f64)
 }
 
 struct RunParam((usize, usize));
@@ -109,7 +114,7 @@ fn throughput(c: &mut Criterion) {
     let max_writers = 3;
     let max_readers = 3;
 
-    let pool = Pool::<ThunkWorker<Vec<Duration>>>::new(max_writers + max_readers);
+    let pool = Pool::<ThunkWorker<Duration>>::new(max_writers + max_readers);
     let (tx, mut rx) = std::sync::mpsc::channel();
 
     for num_writers in 1..=max_writers {
