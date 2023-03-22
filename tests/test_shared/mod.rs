@@ -3,6 +3,7 @@ use nexusq2::Receiver;
 use nexusq2::Sender;
 use pretty_assertions_sorted::assert_eq_sorted;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -45,18 +46,25 @@ pub fn advanced_test(
         .collect();
     thread::sleep(Duration::from_secs_f64(0.01));
 
+    let sender_barrier = Arc::new(std::sync::Barrier::new(senders.len() + 1));
+
     for sender in senders {
+        let sb_clone = Arc::clone(&sender_barrier);
         thread::spawn(move || {
-            sender_thread(num, sender_lag, average_jitter, sender);
+            let sender = sender_thread(num, sender_lag, average_jitter, sender);
+            sb_clone.wait();
+            drop(sender);
         });
     }
 
     let mut expected_map = HashMap::with_capacity(num);
     expected_map.extend((0..num).map(|i| (i, num_senders)));
 
-    let results = receivers
+    let results: Vec<_> = receivers
         .into_iter()
-        .map(|jh| jh.join().expect("couldn't join read thread"));
+        .map(|jh| jh.join().expect("couldn't join read thread")).collect();
+
+    sender_barrier.wait();
 
     for result in results {
         let mut count_map: HashMap<usize, usize> = HashMap::with_capacity(num);
@@ -68,11 +76,12 @@ pub fn advanced_test(
     }
 }
 
-fn sender_thread(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: Sender<usize>) {
+fn sender_thread(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: Sender<usize>) -> Sender<usize> {
     for i in 0..num {
         sender.send(i);
         apply_lag(sender_lag, average_jitter);
     }
+    sender
 }
 
 fn apply_lag(lag_time: Duration, average_jitter: f64) {
