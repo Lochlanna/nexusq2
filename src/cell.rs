@@ -16,26 +16,8 @@ impl ToPositive for AtomicI64 {
 }
 
 #[derive(Debug)]
-enum CustomOption<T> {
-    Some(T),
-    None,
-}
-
-impl<T> CustomOption<T>
-where
-    T: Clone,
-{
-    pub unsafe fn unchecked_clone_inner(&self) -> T {
-        match self {
-            Self::Some(value) => value.clone(),
-            Self::None => core::hint::unreachable_unchecked(),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Cell<T> {
-    value: UnsafeCell<CustomOption<T>>,
+    value: UnsafeCell<Option<T>>,
     counter: AtomicI64,
     current_id: AtomicI64,
 }
@@ -44,7 +26,7 @@ impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
         Self {
-            value: UnsafeCell::new(CustomOption::None),
+            value: UnsafeCell::new(None),
             counter: AtomicI64::new(0),
             current_id: AtomicI64::new(-1),
         }
@@ -64,7 +46,7 @@ impl<T> Cell<T> {
 
     pub unsafe fn write_and_publish(&self, value: T, id: i64) {
         let dst = self.value.get();
-        let old_value = core::ptr::replace(dst, CustomOption::Some(value));
+        let old_value = core::ptr::replace(dst, Some(value));
         self.current_id.store(id, Ordering::Release);
         drop(old_value);
     }
@@ -91,7 +73,7 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        (*self.value.get()).unchecked_clone_inner()
+        (*self.value.get()).as_ref().unwrap_unchecked().clone()
     }
 }
 
