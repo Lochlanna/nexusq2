@@ -41,7 +41,7 @@ impl<T> Cell<T> {
     }
 
     pub fn safe_to_write(&self) -> bool {
-        self.counter.load(Ordering::Acquire) <= 0
+        self.counter.load(Ordering::Acquire) == 0
     }
 
     pub unsafe fn write_and_publish(&self, value: T, id: i64) {
