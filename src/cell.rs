@@ -1,7 +1,8 @@
-use crate::wait_strategy::HybridWait;
+use crate::wait_strategy::{HybridWait, WaitError};
 use core::fmt::Debug;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::{Duration, Instant};
 
 trait ToPositive {
     fn to_positive(&self);
@@ -36,11 +37,46 @@ impl<T> Default for Cell<T> {
     }
 }
 
+//wait functions
 impl<T> Cell<T> {
-    pub fn wait_for_readers(&self) {
+    pub fn wait_for_write_safe(&self) {
         self.wait_strategy.wait_for(&self.counter, 0);
     }
+    pub fn wait_for_write_safe_with_timeout(&self, timeout: Duration) -> Result<(), WaitError> {
+        self.wait_strategy
+            .wait_until(&self.counter, 0, Instant::now() + timeout)
+    }
+    pub fn wait_for_write_safe_until(&self, deadline: Instant) -> Result<(), WaitError> {
+        self.wait_strategy.wait_until(&self.counter, 0, deadline)
+    }
 
+    pub fn wait_for_published(&self, expected_published_id: i64) {
+        self.wait_strategy
+            .wait_for(&self.current_id, expected_published_id);
+    }
+    pub fn wait_for_published_until(
+        &self,
+        expected_published_id: i64,
+        deadline: Instant,
+    ) -> Result<(), WaitError> {
+        self.wait_strategy
+            .wait_until(&self.current_id, expected_published_id, deadline)
+    }
+    pub fn wait_for_published_with_timeout(
+        &self,
+        expected_published_id: i64,
+        timeout: Duration,
+    ) -> Result<(), WaitError> {
+        self.wait_strategy.wait_until(
+            &self.current_id,
+            expected_published_id,
+            Instant::now() + timeout,
+        )
+    }
+}
+
+//write side functions
+impl<T> Cell<T> {
     pub fn safe_to_write(&self) -> bool {
         self.counter.load(Ordering::Acquire) == 0
     }
@@ -52,16 +88,14 @@ impl<T> Cell<T> {
         self.wait_strategy.notify();
         drop(old_value);
     }
+}
 
+//read side functions
+impl<T> Cell<T> {
     pub fn move_from(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old > 0);
         self.wait_strategy.notify();
-    }
-
-    pub fn wait_for_published(&self, expected_published_id: i64) {
-        self.wait_strategy
-            .wait_for(&self.current_id, expected_published_id);
     }
 
     pub fn move_to(&self) {
@@ -69,7 +103,6 @@ impl<T> Cell<T> {
         debug_assert!(old >= 0);
     }
 }
-
 impl<T> Cell<T>
 where
     T: Clone,

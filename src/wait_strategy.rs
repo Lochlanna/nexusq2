@@ -1,11 +1,12 @@
 use crate::FastMod;
 use core::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 use std::time::Instant;
+use thiserror::Error as ThisError;
 
-#[derive(Debug)]
+#[derive(Debug, ThisError)]
 pub enum WaitError {
+    #[error("wait strategy timed out waiting for the condition")]
     Timeout,
 }
 
@@ -58,16 +59,7 @@ impl HybridWait {
         }
     }
 
-    pub fn wait_for_with_timeout(
-        &self,
-        variable: &AtomicI64,
-        expected: i64,
-        timeout: Duration,
-    ) -> Result<(), WaitError> {
-        self.wait_for_with_deadline(variable, expected, Instant::now() + timeout)
-    }
-
-    pub fn wait_for_with_deadline(
+    pub fn wait_until(
         &self,
         variable: &AtomicI64,
         expected: i64,

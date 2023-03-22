@@ -1,5 +1,13 @@
 use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
 use alloc::sync::Arc;
+use std::time::Instant;
+use thiserror::Error as ThisError;
+
+#[derive(Debug, ThisError)]
+pub enum Error {
+    #[error("timeout while waiting for next value to become available")]
+    Timeout(#[from] crate::wait_strategy::WaitError),
+}
 
 #[derive(Debug)]
 pub struct Receiver<T> {
@@ -48,15 +56,45 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
+    pub fn try_recv_until(&mut self, deadline: Instant) -> Result<T, Error> {
+        unsafe { self.unsafe_try_recv_until(deadline) }
+    }
+
     pub fn recv(&mut self) -> T {
         unsafe { self.unsafe_recv() }
     }
+}
+
+impl<T> Receiver<T>
+where
+    T: Clone,
+{
+    unsafe fn unsafe_try_recv_until(&mut self, deadline: Instant) -> Result<T, Error> {
+        unsafe {
+            let current_cell = self.get_current_cell();
+
+            (*current_cell).wait_for_published_until(self.cursor, deadline)?;
+
+            Ok(self.do_read(current_cell))
+        }
+    }
+
     unsafe fn unsafe_recv(&mut self) -> T {
-        let current_index = (self.cursor as usize).fast_mod(self.nexus_details.buffer_length);
-        let current_cell = self.nexus_details.buffer_raw.add(current_index);
+        unsafe {
+            let current_cell = self.get_current_cell();
 
-        (*current_cell).wait_for_published(self.cursor);
+            (*current_cell).wait_for_published(self.cursor);
 
+            self.do_read(current_cell)
+        }
+    }
+}
+
+impl<T> Receiver<T>
+where
+    T: Clone,
+{
+    unsafe fn do_read(&mut self, current_cell: *mut Cell<T>) -> T {
         (*current_cell).move_to();
         (*self.previous_cell).move_from();
 
@@ -64,5 +102,10 @@ where
         self.cursor += 1;
 
         (*current_cell).read()
+    }
+
+    unsafe fn get_current_cell(&mut self) -> *mut Cell<T> {
+        let current_index = (self.cursor as usize).fast_mod(self.nexus_details.buffer_length);
+        self.nexus_details.buffer_raw.add(current_index)
     }
 }

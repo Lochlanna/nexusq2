@@ -11,6 +11,7 @@ fast-mod=[]
 
 [dependencies]
 event-listener = "2.5.3"
+thiserror = "1.0.40"
 
 [dev-dependencies]
 criterion = { version = "0.4"}
