@@ -51,7 +51,10 @@ fn multiq2(
     rx: &mut std::sync::mpsc::Receiver<Vec<Duration>>,
 ) -> Duration {
     let size = 100_u64.next_power_of_two();
-    let (sender, receiver) = multiqueue2::broadcast_queue(size);
+    let (sender, receiver) = multiqueue2::broadcast_queue_with(
+        size,
+        multiqueue2::wait::BlockingWait::with_spins(100_000, 0),
+    );
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
 }
@@ -103,8 +106,8 @@ impl Display for RunParam {
 }
 
 fn throughput(c: &mut Criterion) {
-    let max_writers = 2;
-    let max_readers = 2;
+    let max_writers = 3;
+    let max_readers = 3;
 
     let pool = Pool::<ThunkWorker<Vec<Duration>>>::new(max_writers + max_readers);
     let (tx, mut rx) = std::sync::mpsc::channel();
@@ -122,15 +125,15 @@ fn throughput(c: &mut Criterion) {
                     });
                 },
             );
-            // group.bench_with_input(
-            //     BenchmarkId::new("multiq2", RunParam(input)),
-            //     &input,
-            //     |b, &input| {
-            //         b.iter_custom(|iters| {
-            //             black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
-            //         });
-            //     },
-            // );
+            group.bench_with_input(
+                BenchmarkId::new("multiq2", RunParam(input)),
+                &input,
+                |b, &input| {
+                    b.iter_custom(|iters| {
+                        black_box(multiq2(iters, input.0, input.1, &pool, &tx, &mut rx))
+                    });
+                },
+            );
             group.finish();
         }
     }

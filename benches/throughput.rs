@@ -59,7 +59,7 @@ fn multiq2(
         // let (sender, receiver) = multiqueue2::broadcast_queue(100);
         let (sender, receiver) = multiqueue2::broadcast_queue_with(
             size,
-            multiqueue2::wait::BlockingWait::with_spins(100000, 0),
+            multiqueue2::wait::BlockingWait::with_spins(100_000, 0),
         );
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
@@ -111,8 +111,8 @@ impl Display for RunParam {
 
 fn throughput(c: &mut Criterion) {
     let num_elements = 20000;
-    let max_writers = 2;
-    let max_readers = 2;
+    let max_writers = 3;
+    let max_readers = 3;
 
     let pool = Pool::<ThunkWorker<()>>::new(max_writers + max_readers);
     let (tx, mut rx) = std::sync::mpsc::channel();
