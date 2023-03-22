@@ -20,7 +20,7 @@ use std::sync::atomic::AtomicI64;
 
 use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;
-pub use sender::{Sender, TrySendError};
+pub use sender::Sender;
 
 pub trait FastMod {
     #[must_use]
@@ -52,6 +52,17 @@ impl FastMod for usize {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct NexusDetails<T> {
+    claimed: *const AtomicI64,
+    tail: *const AtomicI64,
+    tail_wait_strategy: *const HybridWait,
+    buffer_raw: *mut cell::Cell<T>,
+    buffer_length: usize,
+}
+
+unsafe impl<T> Send for NexusDetails<T> {}
+
 #[derive(Debug)]
 struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
@@ -82,14 +93,14 @@ impl<T> NexusQ<T> {
         }
     }
 
-    pub(crate) const fn get_claimed(&self) -> *const AtomicI64 {
-        &self.claimed
-    }
-    pub(crate) const fn get_tail(&self) -> *const AtomicI64 {
-        &self.tail
-    }
-    pub(crate) const fn get_tail_wait_strategy(&self) -> *const HybridWait {
-        &self.tail_wait_strategy
+    pub(crate) fn get_details(&self) -> NexusDetails<T> {
+        NexusDetails {
+            claimed: &self.claimed,
+            tail: &self.tail,
+            tail_wait_strategy: &self.tail_wait_strategy,
+            buffer_raw: self.buffer_raw,
+            buffer_length: self.buffer.len(),
+        }
     }
 }
 
