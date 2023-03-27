@@ -14,7 +14,7 @@ pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,
     cursor: usize,
-    previous_cell: *mut Cell<T>,
+    previous_cell: *const Cell<T>,
 }
 
 unsafe impl<T> Send for Receiver<T> {}
@@ -31,7 +31,7 @@ impl<T> Receiver<T> {
             previous_cell,
         }
     }
-    fn register(buffer: *mut Cell<T>) {
+    fn register(buffer: *const Cell<T>) {
         unsafe {
             (*buffer).move_to();
         }
@@ -94,7 +94,7 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
-    unsafe fn do_read(&mut self, current_cell: *mut Cell<T>) -> T {
+    unsafe fn do_read(&mut self, current_cell: *const Cell<T>) -> T {
         (*current_cell).move_to();
         (*self.previous_cell).move_from();
 
@@ -104,7 +104,7 @@ where
         (*current_cell).read()
     }
 
-    unsafe fn get_current_cell(&mut self) -> *mut Cell<T> {
+    unsafe fn get_current_cell(&mut self) -> *const Cell<T> {
         let current_index = self.cursor.fast_mod(self.nexus_details.buffer_length);
         self.nexus_details.buffer_raw.add(current_index)
     }
