@@ -16,7 +16,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicPtr, AtomicUsize};
 
 use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;
@@ -64,13 +64,29 @@ impl FastMod for u64 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug)]
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
-    tail: *const AtomicUsize,
+    tail: *const AtomicPtr<cell::Cell<T>>,
     tail_wait_strategy: *const HybridWait,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
+}
+
+// Why can't we derive this?
+impl<T> Copy for NexusDetails<T> {}
+
+// Why can't we derive this?
+impl<T> Clone for NexusDetails<T> {
+    fn clone(&self) -> Self {
+        Self {
+            claimed: self.claimed,
+            tail: self.tail,
+            tail_wait_strategy: self.tail_wait_strategy,
+            buffer_raw: self.buffer_raw,
+            buffer_length: self.buffer_length,
+        }
+    }
 }
 
 unsafe impl<T> Send for NexusDetails<T> {}
@@ -80,7 +96,7 @@ struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicUsize,
-    tail: AtomicUsize,
+    tail: AtomicPtr<cell::Cell<T>>,
     tail_wait_strategy: HybridWait,
 }
 
@@ -96,12 +112,14 @@ impl<T> NexusQ<T> {
 
         let buffer_raw = buffer.as_mut_ptr();
 
-        Self {
-            buffer,
-            buffer_raw,
-            claimed: AtomicUsize::new(1),
-            tail: AtomicUsize::new(0),
-            tail_wait_strategy: HybridWait::default(),
+        unsafe {
+            Self {
+                buffer,
+                buffer_raw,
+                claimed: AtomicUsize::new(1),
+                tail: AtomicPtr::new(buffer_raw.add(1)),
+                tail_wait_strategy: HybridWait::default(),
+            }
         }
     }
 

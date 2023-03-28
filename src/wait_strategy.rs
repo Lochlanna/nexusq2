@@ -1,5 +1,5 @@
 use crate::FastMod;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
@@ -99,5 +99,106 @@ impl HybridWait {
     }
     pub fn notify(&self) {
         self.event.notify(usize::MAX);
+    }
+}
+
+#[derive(Debug)]
+pub struct HybridWaitPtr {
+    num_spin: u64,
+    num_yield: u64,
+    event: event_listener::Event,
+}
+
+impl HybridWaitPtr {
+    pub const fn new(num_spin: u64, num_yield: u64) -> Self {
+        Self {
+            num_spin,
+            num_yield,
+            event: event_listener::Event::new(),
+        }
+    }
+}
+
+impl Default for HybridWaitPtr {
+    fn default() -> Self {
+        Self::new(100_000, 0)
+    }
+}
+
+impl HybridWaitPtr {
+    pub fn take_ptr<T>(&self, ptr: &AtomicPtr<T>) -> *mut T {
+        let mut v;
+        for _ in 0..self.num_spin {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return v;
+            }
+            core::hint::spin_loop();
+        }
+        for _ in 0..self.num_yield {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return v;
+            }
+            std::thread::yield_now();
+        }
+        loop {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return v;
+            }
+            let listen_guard = self.event.listen();
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return v;
+            }
+            listen_guard.wait();
+        }
+    }
+
+    pub fn take_ptr_before<T>(
+        &self,
+        ptr: &AtomicPtr<T>,
+        deadline: Instant,
+    ) -> Result<*mut T, WaitError> {
+        let mut v;
+        for n in 0..self.num_spin {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return Ok(v);
+            }
+            if n.fast_mod(256) == 0 && Instant::now() >= deadline {
+                return Err(WaitError::Timeout);
+            }
+            core::hint::spin_loop();
+        }
+        for _ in 0..self.num_yield {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return Ok(v);
+            }
+            if Instant::now() >= deadline {
+                return Err(WaitError::Timeout);
+            }
+            std::thread::yield_now();
+        }
+        loop {
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return Ok(v);
+            }
+            let listen_guard = self.event.listen();
+            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            if !v.is_null() {
+                return Ok(v);
+            }
+            if !listen_guard.wait_deadline(deadline) {
+                return Err(WaitError::Timeout);
+            }
+        }
+    }
+
+    pub fn notify(&self) {
+        self.event.notify(1);
     }
 }
