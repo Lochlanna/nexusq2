@@ -129,26 +129,26 @@ impl HybridWaitPtr {
     pub fn take_ptr<T>(&self, ptr: &AtomicPtr<T>) -> *mut T {
         let mut v;
         for _ in 0..self.num_spin {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return v;
             }
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return v;
             }
             std::thread::yield_now();
         }
         loop {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return v;
             }
             let listen_guard = self.event.listen();
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return v;
             }
@@ -163,7 +163,7 @@ impl HybridWaitPtr {
     ) -> Result<*mut T, WaitError> {
         let mut v;
         for n in 0..self.num_spin {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return Ok(v);
             }
@@ -173,7 +173,7 @@ impl HybridWaitPtr {
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return Ok(v);
             }
@@ -183,12 +183,12 @@ impl HybridWaitPtr {
             std::thread::yield_now();
         }
         loop {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return Ok(v);
             }
             let listen_guard = self.event.listen();
-            v = ptr.swap(core::ptr::null_mut(), Ordering::AcqRel);
+            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
             if !v.is_null() {
                 return Ok(v);
             }

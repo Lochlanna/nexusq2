@@ -52,7 +52,7 @@ impl<T> Drop for Sender<T> {
         // This could happen if send was being run just as this thread was being aborted
         unsafe {
             // return the cell and notify other threads that it's available again
-            (*self.nexus_details.tail).store(self.current_cell, Ordering::Relaxed);
+            (*self.nexus_details.tail).store(self.current_cell, Ordering::Release);
             (*self.nexus_details.tail_wait_strategy).notify_one();
         }
     }
@@ -108,13 +108,14 @@ where
     /// let (mut sender, _) = nexusq2::make_channel(3);
     /// sender.try_send(1).expect("this should be fine");
     /// sender.try_send(2).expect("this should be fine");
-    /// assert!(sender.try_send(3).is_err())
+    /// sender.try_send(3).expect("this should be fine");
+    /// assert!(sender.try_send(4).is_err())
     /// ```
     pub fn try_send(&mut self, value: T) -> Result<(), SendError<T>> {
         unsafe {
             debug_assert!(self.current_cell.is_null());
             self.current_cell =
-                (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::AcqRel);
+                (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
 
             if self.current_cell.is_null() || !(*self.current_cell).safe_to_write() {
                 self.current_cell =
