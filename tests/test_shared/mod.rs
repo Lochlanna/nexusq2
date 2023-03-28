@@ -81,7 +81,7 @@ fn sender_thread(
     num: usize,
     sender_lag: Duration,
     average_jitter: f64,
-    mut sender: Sender<usize>,
+    sender: Sender<usize>,
 ) -> Sender<usize> {
     for i in 0..num {
         sender.send(i);

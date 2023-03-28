@@ -1,4 +1,3 @@
-use crate::cell::Cell;
 use crate::NexusDetails;
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;
@@ -18,7 +17,6 @@ pub enum SendError<T> {
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,
-    current_cell: *mut Cell<T>,
 }
 
 unsafe impl<T> Send for Sender<T> {}
@@ -29,7 +27,6 @@ impl<T> Sender<T> {
         Self {
             nexus,
             nexus_details,
-            current_cell: core::ptr::null_mut(),
         }
     }
 }
@@ -39,21 +36,6 @@ impl<T> Clone for Sender<T> {
         Self {
             nexus: Arc::clone(&self.nexus),
             nexus_details: self.nexus_details,
-            current_cell: core::ptr::null_mut(),
-        }
-    }
-}
-
-impl<T> Drop for Sender<T> {
-    fn drop(&mut self) {
-        if self.current_cell.is_null() {
-            return;
-        }
-        // This could happen if send was being run just as this thread was being aborted
-        unsafe {
-            // return the cell and notify other threads that it's available again
-            (*self.nexus_details.tail).store(self.current_cell, Ordering::Release);
-            (*self.nexus_details.tail_wait_strategy).notify_one();
         }
     }
 }
@@ -63,30 +45,23 @@ where
     T: Send,
 {
     /// Send a value to the channel. This method will block until a slot becomes available.
-    pub fn send(&mut self, value: T) {
+    pub fn send(&self, value: T) {
         unsafe {
-            debug_assert!(self.current_cell.is_null());
-            self.current_cell =
+            let cell =
                 (*self.nexus_details.tail_wait_strategy).take_ptr(&(*self.nexus_details.tail));
 
-            (*self.current_cell).wait_for_write_safe();
+            (*cell).wait_for_write_safe();
 
             let claimed = (*self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
 
             let next_index = (claimed + 1).fast_mod(self.nexus_details.buffer_length);
             let next_cell = self.nexus_details.buffer_raw.add(next_index);
 
-            let cell = self.current_cell;
-            self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-            debug_assert!(self.current_cell.is_null());
-            {
-                // if we fail in here it is bad times. The only reason we can/should fail in here
-                // is if the thread this is running on is forcibly aborted
-                //TODO is there a cleanup we can do in drop to recover
-                (*self.nexus_details.tail_wait_strategy).notify_one();
+            (*self.nexus_details.tail).store(next_cell, Ordering::Release);
 
-                (*cell).write_and_publish(value, claimed);
-            }
+            (*self.nexus_details.tail_wait_strategy).notify_one();
+
+            (*cell).write_and_publish(value, claimed);
         }
     }
 
@@ -109,15 +84,15 @@ where
     /// sender.try_send(3).expect("this should be fine");
     /// assert!(sender.try_send(4).is_err())
     /// ```
-    pub fn try_send(&mut self, value: T) -> Result<(), SendError<T>> {
+    pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
         unsafe {
-            debug_assert!(self.current_cell.is_null());
-            self.current_cell =
-                (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
+            let cell = (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
 
-            if self.current_cell.is_null() || !(*self.current_cell).safe_to_write() {
-                self.current_cell =
-                    (*self.nexus_details.tail).swap(self.current_cell, Ordering::Release);
+            if cell.is_null() {
+                return Err(SendError::Full(value));
+            }
+            if !(*cell).safe_to_write() {
+                (*self.nexus_details.tail).store(cell, Ordering::Release);
                 return Err(SendError::Full(value));
             }
 
@@ -126,17 +101,12 @@ where
             let next_index = (claimed + 1).fast_mod(self.nexus_details.buffer_length);
             let next_cell = self.nexus_details.buffer_raw.add(next_index);
 
-            let cell = self.current_cell;
-            self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-            debug_assert!(self.current_cell.is_null());
-            {
-                // if we fail in here it is bad times. The only reason we can/should fail in here
-                // is if the thread this is running on is forcibly aborted
-                //TODO is there a cleanup we can do in drop to recover
-                (*self.nexus_details.tail_wait_strategy).notify_one();
+            (*self.nexus_details.tail).store(next_cell, Ordering::Release);
 
-                (*cell).write_and_publish(value, claimed);
-            }
+            (*self.nexus_details.tail_wait_strategy).notify_one();
+
+            (*cell).write_and_publish(value, claimed);
+
             Ok(())
         }
     }
@@ -157,22 +127,13 @@ where
     /// # Errors
     /// - [`SendError::Timeout`] The value couldn't be sent before the deadline.
     /// The value is contained within the error.
-    pub fn try_send_before(&mut self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
+    pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
         unsafe {
-            debug_assert!(self.current_cell.is_null());
-            self.current_cell = match (*self.nexus_details.tail_wait_strategy)
-                .take_ptr_before(&(*self.nexus_details.tail), deadline)
-            {
-                Ok(cell) => cell,
-                Err(_) => return Err(SendError::Timeout(value)),
-            };
+            let Ok(cell) = (*self.nexus_details.tail_wait_strategy)
+                .take_ptr_before(&(*self.nexus_details.tail), deadline) else { return Err(SendError::Timeout(value)) };
 
-            if (*self.current_cell)
-                .wait_for_write_safe_before(deadline)
-                .is_err()
-            {
-                self.current_cell =
-                    (*self.nexus_details.tail).swap(self.current_cell, Ordering::Release);
+            if (*cell).wait_for_write_safe_before(deadline).is_err() {
+                (*self.nexus_details.tail).store(cell, Ordering::Release);
                 return Err(SendError::Timeout(value));
             }
 
@@ -181,25 +142,12 @@ where
             let next_index = (claimed + 1).fast_mod(self.nexus_details.buffer_length);
             let next_cell = self.nexus_details.buffer_raw.add(next_index);
 
-            let cell = self.current_cell;
-            self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-            debug_assert!(self.current_cell.is_null());
-            {
-                // if we fail in here it is bad times. The only reason we can/should fail in here
-                // is if the thread this is running on is forcibly aborted
-                //TODO is there a cleanup we can do in drop to recover
-                (*self.nexus_details.tail_wait_strategy).notify_one();
+            (*self.nexus_details.tail).store(next_cell, Ordering::Release);
 
-                (*cell).write_and_publish(value, claimed);
-            }
+            (*self.nexus_details.tail_wait_strategy).notify_one();
+
+            (*cell).write_and_publish(value, claimed);
         }
         Ok(())
     }
 }
-
-// TODO implement a weak sender that holds a reference to a full sender but has it's own current cell
-// It'll be useful for allowing cheaper clones of senders
-// probably best to do this by changing current sender to be Sender base
-// create a sender class that fully owns sender base and has it's own current cell
-// sender base will take &mut current cell as a argument
-// easy to create weak senders from this model

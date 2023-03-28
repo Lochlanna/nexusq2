@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn basic_channel_test() {
-        let (mut sender, mut receiver) = make_channel(4);
+        let (sender, mut receiver) = make_channel(4);
         sender.send(1);
         sender.send(2);
         sender.send(3);
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn basic_channel_test_try() {
-        let (mut sender, mut receiver) = make_channel(4);
+        let (sender, mut receiver) = make_channel(4);
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
         sender.try_send(3).unwrap();
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn try_send_to_full_fails() {
-        let (mut sender, _) = make_channel(4);
+        let (sender, _) = make_channel(4);
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
         sender.try_send(3).unwrap();
@@ -221,7 +221,7 @@ mod drop_tests {
     #[test]
     fn valid_drop_full_buffer() {
         let counter = Arc::default();
-        let (mut sender, mut receiver) = make_channel(16);
+        let (sender, mut receiver) = make_channel(16);
         for _ in 0..15 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -235,7 +235,7 @@ mod drop_tests {
     #[test]
     fn valid_drop_partial_buffer() {
         let counter = Arc::default();
-        let (mut sender, _) = make_channel(16);
+        let (sender, _) = make_channel(16);
         for _ in 0..3 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -252,7 +252,7 @@ mod drop_tests {
     #[test]
     fn valid_drop_overwrite() {
         let counter = Arc::default();
-        let (mut sender, mut receiver) = make_channel::<CustomDropper>(4);
+        let (sender, mut receiver) = make_channel::<CustomDropper>(4);
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
