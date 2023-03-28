@@ -64,7 +64,7 @@ impl FastMod for u64 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
     tail: *const AtomicUsize,

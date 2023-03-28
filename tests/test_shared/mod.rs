@@ -62,7 +62,8 @@ pub fn advanced_test(
 
     let results: Vec<_> = receivers
         .into_iter()
-        .map(|jh| jh.join().expect("couldn't join read thread")).collect();
+        .map(|jh| jh.join().expect("couldn't join read thread"))
+        .collect();
 
     sender_barrier.wait();
 
@@ -76,7 +77,12 @@ pub fn advanced_test(
     }
 }
 
-fn sender_thread(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: Sender<usize>) -> Sender<usize> {
+fn sender_thread(
+    num: usize,
+    sender_lag: Duration,
+    average_jitter: f64,
+    sender: Sender<usize>,
+) -> Sender<usize> {
     for i in 0..num {
         sender.send(i);
         apply_lag(sender_lag, average_jitter);

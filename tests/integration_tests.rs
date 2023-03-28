@@ -46,7 +46,7 @@ fn two_sender_two_receiver_long() {
 #[ignore]
 fn latency() {
     let mut total_duration = Duration::from_nanos(0);
-    let (mut sender, mut receiver) = make_channel(128);
+    let (sender, mut receiver) = make_channel(128);
     let num_sent = 500;
     for _ in 0..num_sent {
         sender.send(Instant::now());

@@ -60,6 +60,10 @@ impl<T> Cell<T> {
             Instant::now() + timeout,
         )
     }
+
+    pub fn get_published(&self) -> usize {
+        self.current_id.load(Ordering::Acquire)
+    }
 }
 
 //write side functions

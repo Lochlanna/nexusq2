@@ -7,6 +7,8 @@ use thiserror::Error as ThisError;
 pub enum Error {
     #[error("timeout while waiting for next value to become available")]
     Timeout(#[from] crate::wait_strategy::WaitError),
+    #[error("there's no new data available to be read")]
+    NoNewData,
 }
 
 #[derive(Debug)]
@@ -56,20 +58,13 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
+    /// Wait for the next value to become available for up to the deadline time.
+    /// If the next value is available before the deadline it's read otherwise an
+    /// error is returned.
+    ///
+    /// # Errors
+    /// - [`Error::Timeout`] The deadline was hit before a new value became available
     pub fn try_recv_until(&mut self, deadline: Instant) -> Result<T, Error> {
-        unsafe { self.unsafe_try_recv_until(deadline) }
-    }
-
-    pub fn recv(&mut self) -> T {
-        unsafe { self.unsafe_recv() }
-    }
-}
-
-impl<T> Receiver<T>
-where
-    T: Clone,
-{
-    unsafe fn unsafe_try_recv_until(&mut self, deadline: Instant) -> Result<T, Error> {
         unsafe {
             let current_cell = self.get_current_cell();
 
@@ -79,13 +74,30 @@ where
         }
     }
 
-    unsafe fn unsafe_recv(&mut self) -> T {
+    /// Wait for the next value to become available and read it.
+    /// This function should never fail
+    pub fn recv(&mut self) -> T {
         unsafe {
             let current_cell = self.get_current_cell();
 
             (*current_cell).wait_for_published(self.cursor);
 
             self.do_read(current_cell)
+        }
+    }
+
+    /// Attempts to immediately read the next value. If a new value is not available immediately an
+    /// error is returned
+    ///
+    /// # Errors
+    /// - [`Error::NoNewData`] There was no unread data in the channel
+    pub fn try_recv(&mut self) -> Result<T, Error> {
+        unsafe {
+            let current_cell = self.get_current_cell();
+            if (*current_cell).get_published() != self.cursor {
+                return Err(Error::NoNewData);
+            }
+            Ok(self.do_read(current_cell))
         }
     }
 }
