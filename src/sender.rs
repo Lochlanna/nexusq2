@@ -62,9 +62,7 @@ impl<T> Sender<T>
 where
     T: Send,
 {
-    /// Send a value to the channel. This method will block until a slot becomes available. This
-    /// is the most efficient way to send to the channel as using this function eliminates racing
-    /// for the next available slot.
+    /// Send a value to the channel. This method will block until a slot becomes available.
     pub fn send(&mut self, value: T) {
         unsafe {
             debug_assert!(self.current_cell.is_null());
@@ -198,3 +196,10 @@ where
         Ok(())
     }
 }
+
+// TODO implement a weak sender that holds a reference to a full sender but has it's own current cell
+// It'll be useful for allowing cheaper clones of senders
+// probably best to do this by changing current sender to be Sender base
+// create a sender class that fully owns sender base and has it's own current cell
+// sender base will take &mut current cell as a argument
+// easy to create weak senders from this model

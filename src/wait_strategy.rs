@@ -126,6 +126,9 @@ impl Default for HybridWaitPtr {
 }
 
 impl HybridWaitPtr {
+    /// claim the pointer by replacing it with null.
+    /// It's important to note that any spin/yield loops create competition for the pointer
+    /// full block is the only version which eliminates competition by creating a queue internally
     pub fn take_ptr<T>(&self, ptr: &AtomicPtr<T>) -> *mut T {
         let mut v;
         for _ in 0..self.num_spin {
