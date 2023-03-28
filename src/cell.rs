@@ -33,7 +33,7 @@ impl<T> Cell<T> {
         self.wait_strategy
             .wait_until(&self.counter, 0, Instant::now() + timeout)
     }
-    pub fn wait_for_write_safe_until(&self, deadline: Instant) -> Result<(), WaitError> {
+    pub fn wait_for_write_safe_before(&self, deadline: Instant) -> Result<(), WaitError> {
         self.wait_strategy.wait_until(&self.counter, 0, deadline)
     }
 

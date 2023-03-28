@@ -165,7 +165,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn basic_channel_test_try() {
         let (mut sender, mut receiver) = make_channel(4);
         sender.try_send(1).unwrap();
