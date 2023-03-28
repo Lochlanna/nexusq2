@@ -54,7 +54,7 @@ impl<T> Drop for Sender<T> {
         unsafe {
             // return the cell and notify other threads that it's available again
             (*self.nexus_details.tail).store(self.current_cell, Ordering::Relaxed);
-            (*self.nexus_details.tail_wait_strategy).notify();
+            (*self.nexus_details.tail_wait_strategy).notify_one();
         }
     }
 }
@@ -69,10 +69,8 @@ where
     pub fn send(&mut self, value: T) {
         unsafe {
             debug_assert!(self.current_cell.is_null());
-            while self.current_cell.is_null() {
-                self.current_cell =
-                    (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Relaxed);
-            }
+            self.current_cell =
+                (*self.nexus_details.tail_wait_strategy).take_ptr(&(*self.nexus_details.tail));
 
             (*self.current_cell).wait_for_write_safe();
 
@@ -82,24 +80,24 @@ where
             let next_cell = self.nexus_details.buffer_raw.add(next_index);
 
             let cell = self.current_cell;
-            self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Relaxed);
+            self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
 
             {
                 // if we fail in here it is bad times. The only reason we can/should fail in here
                 // is if the thread this is running on is forcibly aborted
                 //TODO is there a cleanup we can do in drop to recover
-                (*self.nexus_details.tail_wait_strategy).notify();
+                (*self.nexus_details.tail_wait_strategy).notify_one();
 
                 (*cell).write_and_publish(value, claimed);
             }
         }
     }
 
-    pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
+    pub fn try_send(&mut self, value: T) -> Result<(), SendError<T>> {
         todo!()
     }
 
-    pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
+    pub fn try_send_before(&mut self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
         todo!()
     }
 }

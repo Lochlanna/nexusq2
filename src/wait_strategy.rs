@@ -198,7 +198,9 @@ impl HybridWaitPtr {
         }
     }
 
-    pub fn notify(&self) {
+    pub fn notify_one(&self) {
+        // Only one thread can hold the pointer at a time so we only want to wake one!
+        // This gives us ordering for free when we use the full blocking strategy!
         self.event.notify(1);
     }
 }
