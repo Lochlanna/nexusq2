@@ -80,7 +80,7 @@ where
 
             let cell = self.current_cell;
             self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-
+            debug_assert!(self.current_cell.is_null());
             {
                 // if we fail in here it is bad times. The only reason we can/should fail in here
                 // is if the thread this is running on is forcibly aborted
@@ -130,7 +130,7 @@ where
 
             let cell = self.current_cell;
             self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-
+            debug_assert!(self.current_cell.is_null());
             {
                 // if we fail in here it is bad times. The only reason we can/should fail in here
                 // is if the thread this is running on is forcibly aborted
@@ -185,7 +185,7 @@ where
 
             let cell = self.current_cell;
             self.current_cell = (*self.nexus_details.tail).swap(next_cell, Ordering::Release);
-
+            debug_assert!(self.current_cell.is_null());
             {
                 // if we fail in here it is bad times. The only reason we can/should fail in here
                 // is if the thread this is running on is forcibly aborted
