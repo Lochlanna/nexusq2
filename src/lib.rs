@@ -18,7 +18,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 
-use crate::wait_strategy::HybridWaitPtr;
+use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;
 pub use sender::Sender;
 
@@ -68,7 +68,7 @@ impl FastMod for u64 {
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
     tail: *const AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: *const HybridWaitPtr,
+    tail_wait_strategy: *const HybridWait,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
 }
@@ -97,7 +97,7 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicUsize,
     tail: AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: HybridWaitPtr,
+    tail_wait_strategy: HybridWait,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -118,7 +118,7 @@ impl<T> NexusQ<T> {
                 buffer_raw,
                 claimed: AtomicUsize::new(1),
                 tail: AtomicPtr::new(buffer_raw.add(1)),
-                tail_wait_strategy: HybridWaitPtr::default(),
+                tail_wait_strategy: HybridWait::default(),
             }
         }
     }

@@ -3,6 +3,54 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
+pub trait Waitable {
+    type Inner: Copy;
+    fn check(&self, expected: Self::Inner) -> bool;
+}
+
+impl Waitable for AtomicUsize {
+    type Inner = usize;
+
+    fn check(&self, expected: Self::Inner) -> bool {
+        self.load(Ordering::Acquire) == expected
+    }
+}
+
+pub trait Takeable {
+    type Inner: Copy;
+    fn try_take(&self) -> Option<Self::Inner>;
+}
+
+impl<T> Takeable for AtomicPtr<T> {
+    type Inner = *mut T;
+
+    fn try_take(&self) -> Option<Self::Inner> {
+        let v = self.swap(core::ptr::null_mut(), Ordering::Acquire);
+        if v.is_null() {
+            return None;
+        }
+        Some(v)
+    }
+}
+
+pub trait WaitStrategy {
+    fn wait_for<W: Waitable>(&self, waitable: &W, expected_value: W::Inner);
+    fn wait_until<W: Waitable>(
+        &self,
+        value: &W,
+        expected_value: W::Inner,
+        deadline: Instant,
+    ) -> Result<(), WaitError>;
+    fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner;
+    fn take_ptr_before<T: Takeable>(
+        &self,
+        ptr: &T,
+        deadline: Instant,
+    ) -> Result<T::Inner, WaitError>;
+    fn notify_all(&self);
+    fn notify_one(&self);
+}
+
 #[derive(Debug, ThisError)]
 pub enum WaitError {
     #[error("wait strategy timed out waiting for the condition")]
@@ -28,44 +76,44 @@ impl HybridWait {
 
 impl Default for HybridWait {
     fn default() -> Self {
-        Self::new(100_000, 0)
+        Self::new(50, 50)
     }
 }
 
-impl HybridWait {
-    pub fn wait_for(&self, variable: &AtomicUsize, expected: usize) {
+impl WaitStrategy for HybridWait {
+    fn wait_for<W: Waitable>(&self, waitable: &W, expected_value: W::Inner) {
         for _ in 0..self.num_spin {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return;
             }
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return;
             }
             std::thread::yield_now();
         }
         loop {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return;
             }
             let listen_guard = self.event.listen();
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return;
             }
             listen_guard.wait();
         }
     }
 
-    pub fn wait_until(
+    fn wait_until<W: Waitable>(
         &self,
-        variable: &AtomicUsize,
-        expected: usize,
+        waitable: &W,
+        expected_value: W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError> {
         for n in 0..self.num_spin {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return Ok(());
             }
             // We don't want to do this every time during busy spin as it will slow us down a lot
@@ -75,7 +123,7 @@ impl HybridWait {
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return Ok(());
             }
             // Since we're yielding the cpu anyway this is fine
@@ -85,11 +133,11 @@ impl HybridWait {
             std::thread::yield_now();
         }
         loop {
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return Ok(());
             }
             let listen_guard = self.event.listen();
-            if variable.load(Ordering::Acquire) == expected {
+            if waitable.check(expected_value) {
                 return Ok(());
             }
             if !listen_guard.wait_deadline(deadline) {
@@ -97,77 +145,39 @@ impl HybridWait {
             }
         }
     }
-    pub fn notify(&self) {
-        self.event.notify_relaxed(usize::MAX);
-    }
-}
 
-#[derive(Debug)]
-pub struct HybridWaitPtr {
-    num_spin: u64,
-    num_yield: u64,
-    event: event_listener::Event,
-}
-
-impl HybridWaitPtr {
-    pub const fn new(num_spin: u64, num_yield: u64) -> Self {
-        Self {
-            num_spin,
-            num_yield,
-            event: event_listener::Event::new(),
-        }
-    }
-}
-
-impl Default for HybridWaitPtr {
-    fn default() -> Self {
-        Self::new(100_000, 0)
-    }
-}
-
-impl HybridWaitPtr {
-    /// claim the pointer by replacing it with null.
-    /// It's important to note that any spin/yield loops create competition for the pointer
-    /// full block is the only version which eliminates competition by creating a queue internally
-    pub fn take_ptr<T>(&self, ptr: &AtomicPtr<T>) -> *mut T {
-        let mut v;
+    fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner {
         for _ in 0..self.num_spin {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return v;
             }
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return v;
             }
             std::thread::yield_now();
         }
         loop {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return v;
             }
             let listen_guard = self.event.listen();
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return v;
             }
             listen_guard.wait();
         }
     }
 
-    pub fn take_ptr_before<T>(
+    fn take_ptr_before<T: Takeable>(
         &self,
-        ptr: &AtomicPtr<T>,
+        ptr: &T,
         deadline: Instant,
-    ) -> Result<*mut T, WaitError> {
-        let mut v;
+    ) -> Result<T::Inner, WaitError> {
         for n in 0..self.num_spin {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
             if n.fast_mod(256) == 0 && Instant::now() >= deadline {
@@ -176,8 +186,7 @@ impl HybridWaitPtr {
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
             if Instant::now() >= deadline {
@@ -186,13 +195,11 @@ impl HybridWaitPtr {
             std::thread::yield_now();
         }
         loop {
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
             let listen_guard = self.event.listen();
-            v = ptr.swap(core::ptr::null_mut(), Ordering::Acquire);
-            if !v.is_null() {
+            if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
             if !listen_guard.wait_deadline(deadline) {
@@ -201,9 +208,11 @@ impl HybridWaitPtr {
         }
     }
 
-    pub fn notify_one(&self) {
-        // Only one thread can hold the pointer at a time so we only want to wake one!
-        // This gives us ordering for free when we use the full blocking strategy!
+    fn notify_all(&self) {
+        self.event.notify_relaxed(usize::MAX);
+    }
+
+    fn notify_one(&self) {
         self.event.notify_relaxed(1);
     }
 }

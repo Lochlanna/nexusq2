@@ -1,3 +1,4 @@
+use crate::wait_strategy::WaitStrategy;
 use crate::NexusDetails;
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;

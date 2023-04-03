@@ -1,4 +1,4 @@
-use crate::wait_strategy::{HybridWait, WaitError};
+use crate::wait_strategy::{HybridWait, WaitError, WaitStrategy};
 use core::fmt::Debug;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -76,7 +76,7 @@ impl<T> Cell<T> {
         let dst = self.value.get();
         let old_value = core::ptr::replace(dst, Some(value));
         self.current_id.store(id, Ordering::Release);
-        self.wait_strategy.notify();
+        self.wait_strategy.notify_all();
         drop(old_value);
     }
 }
@@ -86,7 +86,7 @@ impl<T> Cell<T> {
     pub fn move_from(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
         assert!(old >= 1);
-        self.wait_strategy.notify();
+        self.wait_strategy.notify_all();
     }
 
     pub fn move_to(&self) {
