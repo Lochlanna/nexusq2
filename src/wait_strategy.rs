@@ -98,7 +98,7 @@ impl HybridWait {
         }
     }
     pub fn notify(&self) {
-        self.event.notify(usize::MAX);
+        self.event.notify_relaxed(usize::MAX);
     }
 }
 
@@ -204,6 +204,6 @@ impl HybridWaitPtr {
     pub fn notify_one(&self) {
         // Only one thread can hold the pointer at a time so we only want to wake one!
         // This gives us ordering for free when we use the full blocking strategy!
-        self.event.notify(1);
+        self.event.notify_relaxed(1);
     }
 }
