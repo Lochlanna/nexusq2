@@ -10,7 +10,7 @@ fast-mod=[]
 
 
 [dependencies]
-event-listener = "2.5"
+event-listener = { git = "https://github.com/smol-rs/event-listener.git" }
 thiserror = "1.0"
 portable-atomic = "1"
 

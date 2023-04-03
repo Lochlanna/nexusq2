@@ -98,11 +98,11 @@ impl WaitStrategy for HybridWait {
             if waitable.check(expected_value) {
                 return;
             }
-            let listen_guard = self.event.listen();
+            let mut listen_guard = self.event.listen();
             if waitable.check(expected_value) {
                 return;
             }
-            listen_guard.wait();
+            listen_guard.as_mut().wait();
         }
     }
 
@@ -136,11 +136,11 @@ impl WaitStrategy for HybridWait {
             if waitable.check(expected_value) {
                 return Ok(());
             }
-            let listen_guard = self.event.listen();
+            let mut listen_guard = self.event.listen();
             if waitable.check(expected_value) {
                 return Ok(());
             }
-            if !listen_guard.wait_deadline(deadline) {
+            if !listen_guard.as_mut().wait_deadline(deadline) {
                 return Err(WaitError::Timeout);
             }
         }
@@ -163,11 +163,11 @@ impl WaitStrategy for HybridWait {
             if let Some(v) = ptr.try_take() {
                 return v;
             }
-            let listen_guard = self.event.listen();
+            let mut listen_guard = self.event.listen();
             if let Some(v) = ptr.try_take() {
                 return v;
             }
-            listen_guard.wait();
+            listen_guard.as_mut().wait();
         }
     }
 
@@ -198,11 +198,11 @@ impl WaitStrategy for HybridWait {
             if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
-            let listen_guard = self.event.listen();
+            let mut listen_guard = self.event.listen();
             if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
-            if !listen_guard.wait_deadline(deadline) {
+            if !listen_guard.as_mut().wait_deadline(deadline) {
                 return Err(WaitError::Timeout);
             }
         }
