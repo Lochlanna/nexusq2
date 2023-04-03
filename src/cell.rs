@@ -1,7 +1,7 @@
 use crate::wait_strategy::{HybridWait, WaitError, WaitStrategy};
 use core::fmt::Debug;
+use portable_atomic::{AtomicUsize, Ordering};
 use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]

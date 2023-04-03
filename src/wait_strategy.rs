@@ -1,5 +1,5 @@
 use crate::FastMod;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 

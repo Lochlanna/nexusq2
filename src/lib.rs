@@ -16,7 +16,7 @@ mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use portable_atomic::{AtomicPtr, AtomicUsize};
 
 use crate::wait_strategy::HybridWait;
 pub use receiver::Receiver;

@@ -2,7 +2,7 @@ use crate::wait_strategy::WaitStrategy;
 use crate::NexusDetails;
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;
-use std::sync::atomic::Ordering;
+use portable_atomic::Ordering;
 use std::time::Instant;
 use thiserror::Error as ThisError;
 

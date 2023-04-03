@@ -10,8 +10,9 @@ fast-mod=[]
 
 
 [dependencies]
-event-listener = "2.5.3"
-thiserror = "1.0.40"
+event-listener = "2.5"
+thiserror = "1.0"
+portable-atomic = { version = "1", default-features = false }
 
 [dev-dependencies]
 criterion = { version = "0.4"}
