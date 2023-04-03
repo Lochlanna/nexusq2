@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
+#![deny(clippy::disallowed_types)]
 
 extern crate alloc;
 
@@ -195,7 +196,7 @@ mod tests {
 #[cfg(test)]
 mod drop_tests {
     use super::*;
-    use core::sync::atomic::{AtomicU64, Ordering};
+    use portable_atomic::{AtomicU64, Ordering};
     use pretty_assertions_sorted::assert_eq;
 
     #[derive(Debug, Clone)]
