@@ -209,10 +209,10 @@ impl WaitStrategy for HybridWait {
     }
 
     fn notify_all(&self) {
-        self.event.notify_relaxed(usize::MAX);
+        self.event.notify(usize::MAX);
     }
 
     fn notify_one(&self) {
-        self.event.notify_relaxed(1);
+        self.event.notify(1);
     }
 }
