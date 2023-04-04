@@ -76,7 +76,7 @@ impl HybridWait {
 
 impl Default for HybridWait {
     fn default() -> Self {
-        Self::new(50, 50)
+        Self::new(0, 0)
     }
 }
 
@@ -94,15 +94,19 @@ impl WaitStrategy for HybridWait {
             }
             std::thread::yield_now();
         }
+        if waitable.check(expected_value) {
+            return;
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
         loop {
-            if waitable.check(expected_value) {
-                return;
-            }
-            let mut listen_guard = self.event.listen();
+            listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
                 return;
             }
             listen_guard.as_mut().wait();
+            if waitable.check(expected_value) {
+                return;
+            }
         }
     }
 
@@ -132,16 +136,20 @@ impl WaitStrategy for HybridWait {
             }
             std::thread::yield_now();
         }
+        if waitable.check(expected_value) {
+            return Ok(());
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
         loop {
-            if waitable.check(expected_value) {
-                return Ok(());
-            }
-            let mut listen_guard = self.event.listen();
+            listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
                 return Ok(());
             }
             if !listen_guard.as_mut().wait_deadline(deadline) {
                 return Err(WaitError::Timeout);
+            }
+            if waitable.check(expected_value) {
+                return Ok(());
             }
         }
     }
@@ -159,15 +167,19 @@ impl WaitStrategy for HybridWait {
             }
             std::thread::yield_now();
         }
+        if let Some(v) = ptr.try_take() {
+            return v;
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
         loop {
-            if let Some(v) = ptr.try_take() {
-                return v;
-            }
-            let mut listen_guard = self.event.listen();
+            listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {
                 return v;
             }
             listen_guard.as_mut().wait();
+            if let Some(v) = ptr.try_take() {
+                return v;
+            }
         }
     }
 
@@ -194,16 +206,20 @@ impl WaitStrategy for HybridWait {
             }
             std::thread::yield_now();
         }
+        if let Some(v) = ptr.try_take() {
+            return Ok(v);
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
         loop {
-            if let Some(v) = ptr.try_take() {
-                return Ok(v);
-            }
-            let mut listen_guard = self.event.listen();
+            listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
             if !listen_guard.as_mut().wait_deadline(deadline) {
                 return Err(WaitError::Timeout);
+            }
+            if let Some(v) = ptr.try_take() {
+                return Ok(v);
             }
         }
     }
