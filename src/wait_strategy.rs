@@ -76,7 +76,7 @@ impl HybridWait {
 
 impl Default for HybridWait {
     fn default() -> Self {
-        Self::new(0, 0)
+        Self::new(50, 50)
     }
 }
 
