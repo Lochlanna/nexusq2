@@ -10,9 +10,10 @@ fast-mod=[]
 
 
 [dependencies]
-event-listener = { git = "https://github.com/smol-rs/event-listener.git" }
+event-listener = { git = "https://github.com/smol-rs/event-listener.git", features=["portable-atomic"]}
 thiserror = "1.0"
 portable-atomic = "1"
+futures = "0.3.26"
 
 [dev-dependencies]
 criterion = { version = "0.4"}

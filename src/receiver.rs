@@ -1,5 +1,7 @@
 use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
 use alloc::sync::Arc;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
@@ -116,8 +118,26 @@ where
         (*current_cell).read()
     }
 
-    unsafe fn get_current_cell(&mut self) -> *const Cell<T> {
+    unsafe fn get_current_cell(&self) -> *const Cell<T> {
         let current_index = self.cursor.fast_mod(self.nexus_details.buffer_length);
         self.nexus_details.buffer_raw.add(current_index)
+    }
+}
+
+impl<T> futures::Stream for Receiver<T>
+where
+    T: Clone,
+{
+    type Item = T;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        unsafe {
+            let current_cell = self.get_current_cell();
+            let mut_self = Pin::get_mut(self);
+            match (*current_cell).poll_published(cx, mut_self.cursor) {
+                Poll::Ready(_) => Poll::Ready(Some(mut_self.do_read(current_cell))),
+                Poll::Pending => Poll::Pending,
+            }
+        }
     }
 }

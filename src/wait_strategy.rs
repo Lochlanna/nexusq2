@@ -1,5 +1,7 @@
 use crate::FastMod;
 use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::future::Future;
+use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
@@ -41,12 +43,19 @@ pub trait WaitStrategy {
         expected_value: W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError>;
+    fn poll<W: Waitable>(
+        &self,
+        cx: &mut Context<'_>,
+        waitable: &W,
+        expected_value: W::Inner,
+    ) -> Poll<()>;
     fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner;
     fn take_ptr_before<T: Takeable>(
         &self,
         ptr: &T,
         deadline: Instant,
     ) -> Result<T::Inner, WaitError>;
+    fn poll_ptr<T: Takeable>(&self, cx: &mut Context<'_>, ptr: &T) -> Poll<T::Inner>;
     fn notify_all(&self);
     fn notify_one(&self);
 }
@@ -224,11 +233,45 @@ impl WaitStrategy for HybridWait {
         }
     }
 
+    fn poll<W: Waitable>(
+        &self,
+        cx: &mut Context<'_>,
+        waitable: &W,
+        expected_value: W::Inner,
+    ) -> Poll<()> {
+        if waitable.check(expected_value) {
+            return Poll::Ready(());
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        if waitable.check(expected_value) {
+            return Poll::Ready(());
+        }
+        return listen_guard.as_mut().poll(cx);
+    }
+
     fn notify_all(&self) {
         self.event.notify(usize::MAX);
     }
 
     fn notify_one(&self) {
         self.event.notify(1);
+    }
+
+    fn poll_ptr<T: Takeable>(&self, cx: &mut Context<'_>, ptr: &T) -> Poll<T::Inner> {
+        if let Some(ptr) = ptr.try_take() {
+            return Poll::Ready(ptr);
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        if let Some(ptr) = ptr.try_take() {
+            return Poll::Ready(ptr);
+        }
+        match listen_guard.as_mut().poll(cx) {
+            Poll::Ready(_) => {
+                let ptr = ptr.try_take();
+                debug_assert!(ptr.is_some());
+                Poll::Ready(ptr.unwrap())
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }

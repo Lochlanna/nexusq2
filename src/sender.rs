@@ -1,8 +1,11 @@
 use crate::wait_strategy::WaitStrategy;
-use crate::NexusDetails;
+use crate::{cell, NexusDetails};
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;
+use futures::Sink;
 use portable_atomic::Ordering;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
@@ -18,6 +21,9 @@ pub enum SendError<T> {
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,
+    // These are for async only
+    current_cell: *mut cell::Cell<T>,
+    claimed: usize,
 }
 
 unsafe impl<T> Send for Sender<T> {}
@@ -28,15 +34,20 @@ impl<T> Sender<T> {
         Self {
             nexus,
             nexus_details,
+            current_cell: core::ptr::null_mut(),
+            claimed: 0,
         }
     }
 }
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
+        debug_assert_eq!(self.current_cell, core::ptr::null_mut());
         Self {
             nexus: Arc::clone(&self.nexus),
             nexus_details: self.nexus_details,
+            current_cell: core::ptr::null_mut(),
+            claimed: 0,
         }
     }
 }
@@ -150,5 +161,55 @@ where
             (*cell).write_and_publish(value, claimed);
         }
         Ok(())
+    }
+}
+
+impl<T> Sink<T> for Sender<T> {
+    type Error = SendError<T>;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let mut_self = Pin::get_mut(self);
+        unsafe {
+            if mut_self.current_cell.is_null() {
+                match (*mut_self.nexus_details.tail_wait_strategy)
+                    .poll_ptr(cx, &(*mut_self.nexus_details.tail))
+                {
+                    Poll::Ready(ptr) => {
+                        mut_self.current_cell = ptr;
+                    }
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            match (*mut_self.current_cell).poll_write_safe(cx) {
+                Poll::Ready(_) => {
+                    let claimed = (*mut_self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
+                    mut_self.claimed = claimed;
+
+                    let next_index = (claimed + 1).fast_mod(mut_self.nexus_details.buffer_length);
+                    let next_cell = mut_self.nexus_details.buffer_raw.add(next_index);
+
+                    (*mut_self.nexus_details.tail).store(next_cell, Ordering::Release);
+                    (*mut_self.nexus_details.tail_wait_strategy).notify_one();
+                    Poll::Ready(Ok(()))
+                }
+                Poll::Pending => Poll::Pending,
+            }
+        }
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+        debug_assert!(!self.current_cell.is_null());
+        unsafe {
+            (*self.current_cell).write_and_publish(item, self.claimed);
+        }
+        Ok(())
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
