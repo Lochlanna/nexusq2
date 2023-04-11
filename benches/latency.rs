@@ -37,7 +37,8 @@ fn nexus(
     rx: &mut std::sync::mpsc::Receiver<Duration>,
 ) -> Duration {
     let size = 100_u64.next_power_of_two();
-    let (sender, receiver) = make_channel(size.try_into().unwrap());
+    let (sender, receiver) =
+        make_channel(size.try_into().unwrap()).expect("couldn't construct channel");
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
 }

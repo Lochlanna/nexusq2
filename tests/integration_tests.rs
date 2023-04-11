@@ -88,7 +88,7 @@ async fn two_sender_two_receiver_long_async() {
 #[ignore]
 fn latency() {
     let mut total_duration = Duration::from_nanos(0);
-    let (sender, mut receiver) = make_channel(128);
+    let (sender, mut receiver) = make_channel(128).expect("couldn't construct channel");
     let num_sent = 500;
     for _ in 0..num_sent {
         sender.send(Instant::now());

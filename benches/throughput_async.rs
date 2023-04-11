@@ -37,7 +37,7 @@ async fn nexus(num: usize, writers: usize, readers: usize, iters: u64) -> Durati
     let size = 100_usize.next_power_of_two();
     let mut total_duration = Duration::new(0, 0);
     for _ in 0..iters {
-        let (sender, receiver) = make_channel(size);
+        let (sender, receiver) = make_channel(size).expect("couldn't construct channel");
 
         total_duration += run_test(num, writers, readers, sender, receiver).await;
     }

@@ -19,6 +19,7 @@ mod wait_strategy;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use portable_atomic::{AtomicPtr, AtomicUsize};
+use thiserror::Error as ThisError;
 
 use crate::wait_strategy::{HybridWait, Take, Wait};
 pub use receiver::Receiver;
@@ -66,6 +67,14 @@ impl FastMod for u64 {
     }
 }
 
+#[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
+pub enum BufferError {
+    #[error("nexusq channel buffers must be at least 2 elements")]
+    BufferTooSmall,
+    #[error("nexusq channel buffers cannot be larger than isize::MAX")]
+    BufferTooLarge,
+}
+
 #[derive(Debug)]
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
@@ -107,15 +116,23 @@ unsafe impl<T> Send for NexusQ<T> {}
 unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> NexusQ<T> {
-    fn new(size: usize) -> Self {
+    fn new(size: usize) -> Result<Self, BufferError> {
         Self::with_strategies(size, HybridWait::default(), HybridWait::default())
     }
 
-    fn with_strategies<W, R>(size: usize, writer_ws: W, reader_ws: R) -> Self
+    fn with_strategies<W, R>(size: usize, writer_ws: W, reader_ws: R) -> Result<Self, BufferError>
     where
         W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
         R: Wait<AtomicUsize> + 'static + Clone,
     {
+        if size < 2 {
+            return Err(BufferError::BufferTooSmall);
+        }
+        if size > isize::MAX as usize {
+            // max size for vector!
+            return Err(BufferError::BufferTooLarge);
+        }
+
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
         buffer.resize_with(size, || cell::Cell::new(reader_ws.clone()));
@@ -123,13 +140,13 @@ impl<T> NexusQ<T> {
         let buffer_raw = buffer.as_mut_ptr();
 
         unsafe {
-            Self {
+            Ok(Self {
                 buffer,
                 buffer_raw,
                 claimed: AtomicUsize::new(1),
                 tail: AtomicPtr::new(buffer_raw.add(1)),
                 tail_wait_strategy: Box::new(writer_ws),
-            }
+            })
         }
     }
 
@@ -144,12 +161,11 @@ impl<T> NexusQ<T> {
     }
 }
 
-#[must_use]
-pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
-    let nexus = Arc::new(NexusQ::new(size));
+pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferError> {
+    let nexus = Arc::new(NexusQ::new(size)?);
     let receiver = Receiver::new(Arc::clone(&nexus));
     let sender = Sender::new(nexus);
-    (sender, receiver)
+    Ok((sender, receiver))
 }
 
 #[cfg(test)]
@@ -160,7 +176,7 @@ mod tests {
 
     #[test]
     fn basic_channel() {
-        let (sender, mut receiver) = make_channel(4);
+        let (sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
         sender.send(1);
         sender.send(2);
         sender.send(3);
@@ -178,7 +194,7 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn basic_channel_async() {
-        let (mut sender, mut receiver) = make_channel(4);
+        let (mut sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
         futures::sink::SinkExt::send(&mut sender, 1)
             .await
             .expect("couldn't send async");
@@ -207,7 +223,7 @@ mod tests {
 
     #[test]
     fn basic_channel_try() {
-        let (sender, mut receiver) = make_channel(4);
+        let (sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
         sender.try_send(3).unwrap();
@@ -225,7 +241,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn try_send_to_full_fails() {
-        let (sender, _) = make_channel(4);
+        let (sender, _) = make_channel(4).expect("couldn't construct channel");
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
         sender.try_send(3).unwrap();
@@ -262,7 +278,7 @@ mod drop_tests {
     #[test]
     fn valid_drop_full_buffer() {
         let counter = Arc::default();
-        let (sender, mut receiver) = make_channel(16);
+        let (sender, mut receiver) = make_channel(16).expect("couldn't construct channel");
         for _ in 0..15 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -276,7 +292,7 @@ mod drop_tests {
     #[test]
     fn valid_drop_partial_buffer() {
         let counter = Arc::default();
-        let (sender, _) = make_channel(16);
+        let (sender, _) = make_channel(16).expect("couldn't construct channel");
         for _ in 0..3 {
             sender.send(CustomDropper::new(&counter));
         }
@@ -286,14 +302,15 @@ mod drop_tests {
 
     #[test]
     fn valid_drop_empty_buffer() {
-        let (sender, _) = make_channel::<CustomDropper>(10);
+        let (sender, _) = make_channel::<CustomDropper>(10).expect("couldn't construct channel");
         drop(sender);
     }
 
     #[test]
     fn valid_drop_overwrite() {
         let counter = Arc::default();
-        let (sender, mut receiver) = make_channel::<CustomDropper>(4);
+        let (sender, mut receiver) =
+            make_channel::<CustomDropper>(4).expect("couldn't construct channel");
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));
         sender.send(CustomDropper::new(&counter));

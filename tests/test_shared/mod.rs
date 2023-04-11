@@ -30,7 +30,7 @@ pub fn advanced_test(
     sender_lag: Duration,
     average_jitter: f64,
 ) {
-    let (sender, receiver) = make_channel(buffer_size);
+    let (sender, receiver) = make_channel(buffer_size).expect("couldn't construct channel");
 
     let mut receivers: Vec<_> = (0..(num_receivers - 1)).map(|_| receiver.clone()).collect();
     receivers.push(receiver);

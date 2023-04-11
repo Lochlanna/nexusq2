@@ -95,7 +95,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// let (mut sender, _) = nexusq2::make_channel(3);
+    /// let (mut sender, _) = nexusq2::make_channel(3).expect("couldn't construct channel");
     /// sender.try_send(1).expect("this should be fine");
     /// sender.try_send(2).expect("this should be fine");
     /// sender.try_send(3).expect("this should be fine");
