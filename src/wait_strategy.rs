@@ -81,6 +81,12 @@ pub struct HybridWait {
     event: event_listener::Event,
 }
 
+impl Clone for HybridWait {
+    fn clone(&self) -> Self {
+        Self::new(self.num_spin, self.num_yield)
+    }
+}
+
 impl HybridWait {
     pub const fn new(num_spin: u64, num_yield: u64) -> Self {
         Self {

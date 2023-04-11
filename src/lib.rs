@@ -20,7 +20,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use portable_atomic::{AtomicPtr, AtomicUsize};
 
-use crate::wait_strategy::{HybridWait, Take};
+use crate::wait_strategy::{HybridWait, Take, Wait};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
@@ -99,7 +99,7 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicUsize,
     tail: AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: HybridWait,
+    tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>>>,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -108,9 +108,17 @@ unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> NexusQ<T> {
     fn new(size: usize) -> Self {
+        Self::with_strategies(size, HybridWait::default(), HybridWait::default())
+    }
+
+    fn with_strategies<W, R>(size: usize, writer_ws: W, reader_ws: R) -> Self
+    where
+        W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
+        R: Wait<AtomicUsize> + 'static + Clone,
+    {
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
-        buffer.resize_with(size, cell::Cell::default);
+        buffer.resize_with(size, || cell::Cell::new(reader_ws.clone()));
 
         let buffer_raw = buffer.as_mut_ptr();
 
@@ -120,7 +128,7 @@ impl<T> NexusQ<T> {
                 buffer_raw,
                 claimed: AtomicUsize::new(1),
                 tail: AtomicPtr::new(buffer_raw.add(1)),
-                tail_wait_strategy: HybridWait::default(),
+                tail_wait_strategy: Box::new(writer_ws),
             }
         }
     }
@@ -129,7 +137,7 @@ impl<T> NexusQ<T> {
         NexusDetails {
             claimed: &self.claimed,
             tail: &self.tail,
-            tail_wait_strategy: &self.tail_wait_strategy,
+            tail_wait_strategy: Box::as_ref(&self.tail_wait_strategy),
             buffer_raw: self.buffer_raw,
             buffer_length: self.buffer.len(),
         }

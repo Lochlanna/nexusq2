@@ -18,17 +18,21 @@ pub struct Cell<T> {
 impl<T> Default for Cell<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn default() -> Self {
-        Self {
-            value: UnsafeCell::new(None),
-            counter: AtomicUsize::new(0),
-            current_id: AtomicUsize::new(usize::MAX),
-            wait_strategy: Box::new(HybridWait::default()),
-        }
+        Self::new(HybridWait::default())
     }
 }
 
 //wait functions
 impl<T> Cell<T> {
+    pub fn new(ws: impl Wait<AtomicUsize> + 'static) -> Self {
+        Self {
+            value: UnsafeCell::new(None),
+            counter: AtomicUsize::new(0),
+            current_id: AtomicUsize::new(usize::MAX),
+            wait_strategy: Box::new(ws),
+        }
+    }
+
     pub fn wait_for_write_safe(&self) {
         self.wait_strategy.wait_for(&self.counter, 0);
     }
