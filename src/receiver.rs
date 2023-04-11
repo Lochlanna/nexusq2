@@ -19,6 +19,8 @@ pub struct Receiver<T> {
     nexus_details: NexusDetails<T>,
     cursor: usize,
     previous_cell: *const Cell<T>,
+    // this is only used for async!
+    current_event: Option<Pin<Box<event_listener::EventListener>>>,
 }
 
 unsafe impl<T> Send for Receiver<T> {}
@@ -33,6 +35,7 @@ impl<T> Receiver<T> {
             nexus_details,
             cursor: 1,
             previous_cell,
+            current_event: None,
         }
     }
     fn register(buffer: *const Cell<T>) {
@@ -44,6 +47,7 @@ impl<T> Receiver<T> {
 
 impl<T> Clone for Receiver<T> {
     fn clone(&self) -> Self {
+        debug_assert!(self.current_event.is_none());
         unsafe {
             (*self.previous_cell).move_to();
         }
@@ -52,6 +56,7 @@ impl<T> Clone for Receiver<T> {
             nexus_details: self.nexus.get_details(),
             cursor: self.cursor,
             previous_cell: self.previous_cell,
+            current_event: None,
         }
     }
 }
@@ -134,7 +139,7 @@ where
         unsafe {
             let current_cell = self.get_current_cell();
             let mut_self = Pin::get_mut(self);
-            match (*current_cell).poll_published(cx, mut_self.cursor) {
+            match (*current_cell).poll_published(cx, mut_self.cursor, &mut mut_self.current_event) {
                 Poll::Ready(_) => Poll::Ready(Some(mut_self.do_read(current_cell))),
                 Poll::Pending => Poll::Pending,
             }

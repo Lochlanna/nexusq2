@@ -1,7 +1,9 @@
 use crate::wait_strategy::{HybridWait, WaitError, WaitStrategy};
 use core::fmt::Debug;
+use event_listener::EventListener;
 use portable_atomic::{AtomicUsize, Ordering};
 use std::cell::UnsafeCell;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
@@ -38,8 +40,13 @@ impl<T> Cell<T> {
         self.wait_strategy.wait_until(&self.counter, 0, deadline)
     }
 
-    pub fn poll_write_safe(&self, cx: &mut Context<'_>) -> Poll<()> {
-        self.wait_strategy.poll(cx, &self.counter, 0)
+    pub fn poll_write_safe(
+        &self,
+        cx: &mut Context<'_>,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
+    ) -> Poll<()> {
+        self.wait_strategy
+            .poll(cx, &self.counter, 0, event_listener)
     }
 
     pub fn wait_for_published(&self, expected_published_id: usize) {
@@ -47,9 +54,14 @@ impl<T> Cell<T> {
             .wait_for(&self.current_id, expected_published_id);
     }
 
-    pub fn poll_published(&self, cx: &mut Context<'_>, expected_published_id: usize) -> Poll<()> {
+    pub fn poll_published(
+        &self,
+        cx: &mut Context<'_>,
+        expected_published_id: usize,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
+    ) -> Poll<()> {
         self.wait_strategy
-            .poll(cx, &self.current_id, expected_published_id)
+            .poll(cx, &self.current_id, expected_published_id, event_listener)
     }
     pub fn wait_for_published_until(
         &self,

@@ -1,6 +1,8 @@
 use crate::FastMod;
+use event_listener::EventListener;
 use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::future::Future;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
@@ -48,6 +50,7 @@ pub trait WaitStrategy {
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: W::Inner,
+        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
     ) -> Poll<()>;
     fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner;
     fn take_ptr_before<T: Takeable>(
@@ -55,7 +58,12 @@ pub trait WaitStrategy {
         ptr: &T,
         deadline: Instant,
     ) -> Result<T::Inner, WaitError>;
-    fn poll_ptr<T: Takeable>(&self, cx: &mut Context<'_>, ptr: &T) -> Poll<T::Inner>;
+    fn poll_ptr<T: Takeable>(
+        &self,
+        cx: &mut Context<'_>,
+        ptr: &T,
+        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
+    ) -> Poll<T::Inner>;
     fn notify_all(&self);
     fn notify_one(&self);
 }
@@ -238,12 +246,18 @@ impl WaitStrategy for HybridWait {
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: W::Inner,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
     ) -> Poll<()> {
         if waitable.check(expected_value) {
+            *event_listener = None;
             return Poll::Ready(());
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let listen_guard = match event_listener {
+            None => event_listener.insert(self.event.listen()),
+            Some(lg) => lg,
+        };
         if waitable.check(expected_value) {
+            *event_listener = None;
             return Poll::Ready(());
         }
         return listen_guard.as_mut().poll(cx);
@@ -257,17 +271,31 @@ impl WaitStrategy for HybridWait {
         self.event.notify(1);
     }
 
-    fn poll_ptr<T: Takeable>(&self, cx: &mut Context<'_>, ptr: &T) -> Poll<T::Inner> {
+    fn poll_ptr<T: Takeable>(
+        &self,
+        cx: &mut Context<'_>,
+        ptr: &T,
+        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
+    ) -> Poll<T::Inner> {
         if let Some(ptr) = ptr.try_take() {
+            *event_listener = None;
             return Poll::Ready(ptr);
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let listen_guard = match event_listener {
+            None => event_listener.insert(self.event.listen()),
+            Some(lg) => lg,
+        };
         if let Some(ptr) = ptr.try_take() {
+            *event_listener = None;
             return Poll::Ready(ptr);
         }
         match listen_guard.as_mut().poll(cx) {
             Poll::Ready(_) => {
+                *event_listener = None;
                 let ptr = ptr.try_take();
+                if ptr.is_none() {
+                    return Poll::Pending;
+                }
                 debug_assert!(ptr.is_some());
                 Poll::Ready(ptr.unwrap())
             }

@@ -1,15 +1,13 @@
+use futures::{Sink, SinkExt, Stream, StreamExt};
 use nexusq2::make_channel;
-use nexusq2::Receiver;
-use nexusq2::Sender;
 use pretty_assertions_sorted::assert_eq_sorted;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-pub mod shared_async;
-
-pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
+pub async fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
     advanced_test(
         num_senders,
         num_receivers,
@@ -18,10 +16,11 @@ pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: u
         Duration::default(),
         Duration::default(),
         0.0,
-    );
+    )
+    .await;
 }
 
-pub fn advanced_test(
+pub async fn advanced_test(
     num_senders: usize,
     num_receivers: usize,
     num: usize,
@@ -41,20 +40,20 @@ pub fn advanced_test(
     let receivers: Vec<_> = receivers
         .into_iter()
         .map(|receiver| {
-            thread::spawn(move || {
-                receive_thread(num_senders, num, receiver_lag, average_jitter, receiver)
+            tokio::spawn(async move {
+                receive_thread(num_senders, num, receiver_lag, average_jitter, receiver).await
             })
         })
         .collect();
-    thread::sleep(Duration::from_secs_f64(0.01));
+    tokio::time::sleep(Duration::from_secs_f64(0.01)).await;
 
-    let sender_barrier = Arc::new(std::sync::Barrier::new(senders.len() + 1));
+    let sender_barrier = Arc::new(tokio::sync::Barrier::new(senders.len() + 1));
 
     for sender in senders {
         let sb_clone = Arc::clone(&sender_barrier);
-        thread::spawn(move || {
-            let sender = sender_thread(num, sender_lag, average_jitter, sender);
-            sb_clone.wait();
+        tokio::spawn(async move {
+            let sender = sender_thread(num, sender_lag, average_jitter, sender).await;
+            sb_clone.wait().await;
             drop(sender);
         });
     }
@@ -62,12 +61,12 @@ pub fn advanced_test(
     let mut expected_map = HashMap::with_capacity(num);
     expected_map.extend((0..num).map(|i| (i, num_senders)));
 
-    let results: Vec<_> = receivers
+    let results: Vec<_> = futures::future::join_all(receivers)
+        .await
         .into_iter()
-        .map(|jh| jh.join().expect("couldn't join read thread"))
+        .map(|v| v.expect("couldn't join receiver"))
         .collect();
-
-    sender_barrier.wait();
+    sender_barrier.wait().await;
 
     for result in results {
         let mut count_map: HashMap<usize, usize> = HashMap::with_capacity(num);
@@ -79,14 +78,13 @@ pub fn advanced_test(
     }
 }
 
-fn sender_thread(
-    num: usize,
-    sender_lag: Duration,
-    average_jitter: f64,
-    sender: Sender<usize>,
-) -> Sender<usize> {
+async fn sender_thread<S>(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: S) -> S
+where
+    S: Sink<usize> + SinkExt<usize> + Unpin + 'static,
+    <S as Sink<usize>>::Error: Debug,
+{
     for i in 0..num {
-        sender.send(i);
+        sender.send(i).await.expect("couldn't send async");
         apply_lag(sender_lag, average_jitter);
     }
     sender
@@ -100,16 +98,19 @@ fn apply_lag(lag_time: Duration, average_jitter: f64) {
     }
 }
 
-fn receive_thread(
+async fn receive_thread<S>(
     num_senders: usize,
     num: usize,
     receiver_lag: Duration,
     average_jitter: f64,
-    mut receiver: Receiver<usize>,
-) -> Vec<usize> {
+    mut receiver: S,
+) -> Vec<S::Item>
+where
+    S: Stream + StreamExt + 'static + Unpin,
+{
     let mut values = Vec::with_capacity(num);
     for _ in 0..(num * num_senders) {
-        let v = receiver.recv();
+        let v = receiver.next().await.expect("couldn't receive async");
         apply_lag(receiver_lag, average_jitter);
         values.push(v);
     }

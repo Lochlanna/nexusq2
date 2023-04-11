@@ -24,6 +24,7 @@ pub struct Sender<T> {
     // These are for async only
     current_cell: *mut cell::Cell<T>,
     claimed: usize,
+    current_event: Option<Pin<Box<event_listener::EventListener>>>,
 }
 
 unsafe impl<T> Send for Sender<T> {}
@@ -36,18 +37,21 @@ impl<T> Sender<T> {
             nexus_details,
             current_cell: core::ptr::null_mut(),
             claimed: 0,
+            current_event: None,
         }
     }
 }
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
+        debug_assert!(self.current_event.is_none());
         debug_assert_eq!(self.current_cell, core::ptr::null_mut());
         Self {
             nexus: Arc::clone(&self.nexus),
             nexus_details: self.nexus_details,
             current_cell: core::ptr::null_mut(),
             claimed: 0,
+            current_event: None,
         }
     }
 }
@@ -171,16 +175,18 @@ impl<T> Sink<T> for Sender<T> {
         let mut_self = Pin::get_mut(self);
         unsafe {
             if mut_self.current_cell.is_null() {
-                match (*mut_self.nexus_details.tail_wait_strategy)
-                    .poll_ptr(cx, &(*mut_self.nexus_details.tail))
-                {
+                match (*mut_self.nexus_details.tail_wait_strategy).poll_ptr(
+                    cx,
+                    &(*mut_self.nexus_details.tail),
+                    &mut mut_self.current_event,
+                ) {
                     Poll::Ready(ptr) => {
                         mut_self.current_cell = ptr;
                     }
                     Poll::Pending => return Poll::Pending,
                 }
             }
-            match (*mut_self.current_cell).poll_write_safe(cx) {
+            match (*mut_self.current_cell).poll_write_safe(cx, &mut mut_self.current_event) {
                 Poll::Ready(_) => {
                     let claimed = (*mut_self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
                     mut_self.claimed = claimed;
@@ -202,6 +208,7 @@ impl<T> Sink<T> for Sender<T> {
         unsafe {
             (*self.current_cell).write_and_publish(item, self.claimed);
         }
+        self.get_mut().current_cell = core::ptr::null_mut();
         Ok(())
     }
 

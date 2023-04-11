@@ -146,10 +146,11 @@ pub fn make_channel<T>(size: usize) -> (Sender<T>, Receiver<T>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use pretty_assertions_sorted::assert_eq;
 
     #[test]
-    fn basic_channel_test() {
+    fn basic_channel() {
         let (sender, mut receiver) = make_channel(4);
         sender.send(1);
         sender.send(2);
@@ -165,8 +166,37 @@ mod tests {
         assert_eq!(receiver.recv(), 6);
     }
 
+    #[tokio::test]
+    async fn basic_channel_async() {
+        let (mut sender, mut receiver) = make_channel(4);
+        futures::sink::SinkExt::send(&mut sender, 1)
+            .await
+            .expect("couldn't send async");
+        futures::sink::SinkExt::send(&mut sender, 2)
+            .await
+            .expect("couldn't send async");
+        futures::sink::SinkExt::send(&mut sender, 3)
+            .await
+            .expect("couldn't send async");
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 1);
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 2);
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 3);
+        futures::sink::SinkExt::send(&mut sender, 4)
+            .await
+            .expect("couldn't send async");
+        futures::sink::SinkExt::send(&mut sender, 5)
+            .await
+            .expect("couldn't send async");
+        futures::sink::SinkExt::send(&mut sender, 6)
+            .await
+            .expect("couldn't send async");
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 4);
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 5);
+        assert_eq!(receiver.next().await.expect("couldn't receive async"), 6);
+    }
+
     #[test]
-    fn basic_channel_test_try() {
+    fn basic_channel_try() {
         let (sender, mut receiver) = make_channel(4);
         sender.try_send(1).unwrap();
         sender.try_send(2).unwrap();
