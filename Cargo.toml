@@ -17,7 +17,7 @@ futures = "0.3.26"
 parking_lot = "0.12"
 
 [dev-dependencies]
-criterion = { version = "0.4"}
+criterion = { version = "0.4", features=["async_tokio"]}
 workerpool = "1.2"
 pretty_assertions_sorted = "1.2"
 rand = "0.8"
@@ -49,9 +49,14 @@ rpath = false
 #rpath = false
 
 
+#[[bench]]
+#name = "throughput"
+#harness = false
+
 [[bench]]
-name = "throughput"
+name = "throughput_async"
 harness = false
+
 
 #[[bench]]
 #name = "latency"
