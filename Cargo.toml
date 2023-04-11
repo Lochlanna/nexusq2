@@ -14,6 +14,7 @@ event-listener = { git = "https://github.com/smol-rs/event-listener.git", featur
 thiserror = "1.0"
 portable-atomic = "1"
 futures = "0.3.26"
+parking_lot = "0.12"
 
 [dev-dependencies]
 criterion = { version = "0.4"}

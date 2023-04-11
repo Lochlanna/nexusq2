@@ -9,6 +9,7 @@
 #![deny(clippy::disallowed_types)]
 
 extern crate alloc;
+extern crate core;
 
 mod cell;
 mod receiver;
@@ -167,6 +168,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn basic_channel_async() {
         let (mut sender, mut receiver) = make_channel(4);
         futures::sink::SinkExt::send(&mut sender, 1)

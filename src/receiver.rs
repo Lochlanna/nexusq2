@@ -1,5 +1,6 @@
 use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
 use alloc::sync::Arc;
+use core::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -23,6 +24,7 @@ pub struct Receiver<T> {
     current_event: Option<Pin<Box<event_listener::EventListener>>>,
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for Receiver<T> {}
 
 impl<T> Receiver<T> {

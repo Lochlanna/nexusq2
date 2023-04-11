@@ -9,7 +9,8 @@ fn one_sender_one_receiver() {
     test(1, 1, 100, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
+#[cfg_attr(miri, ignore)]
 async fn one_sender_one_receiver_async() {
     test_shared::shared_async::test(1, 1, 100, 5).await;
 }
@@ -20,7 +21,7 @@ fn one_sender_one_receiver_long() {
     test(1, 1, 500_000, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
 #[cfg_attr(miri, ignore)]
 async fn one_sender_one_receiver_long_async() {
     test_shared::shared_async::test(1, 1, 500_000, 5).await;
@@ -31,7 +32,8 @@ fn one_sender_two_receiver() {
     test(1, 2, 100, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
+#[cfg_attr(miri, ignore)]
 async fn one_sender_two_receiver_async() {
     test_shared::shared_async::test(1, 2, 100, 5).await;
 }
@@ -42,7 +44,7 @@ fn one_sender_two_receiver_long() {
     test(1, 2, 500_000, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
 #[cfg_attr(miri, ignore)]
 async fn one_sender_two_receiver_long_async() {
     test_shared::shared_async::test(1, 2, 500_000, 5).await;
@@ -53,7 +55,8 @@ fn two_sender_one_receiver() {
     test(2, 1, 100, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
+#[cfg_attr(miri, ignore)]
 async fn two_sender_one_receiver_async() {
     test_shared::shared_async::test(2, 1, 100, 5).await;
 }
@@ -63,19 +66,20 @@ fn two_sender_two_receiver() {
     test(2, 2, 100, 5);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
+#[cfg_attr(miri, ignore)]
 async fn two_sender_two_receiver_async() {
     test_shared::shared_async::test(2, 2, 100, 5).await;
 }
 
 #[test]
-// #[cfg_attr(miri, ignore)]
+#[cfg_attr(miri, ignore)]
 fn two_sender_two_receiver_long() {
     test(2, 2, 1000, 5);
 }
 
-#[tokio::test]
-// #[cfg_attr(miri, ignore)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 5)]
+#[cfg_attr(miri, ignore)]
 async fn two_sender_two_receiver_long_async() {
     test_shared::shared_async::test(2, 2, 1000, 5).await;
 }

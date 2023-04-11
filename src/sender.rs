@@ -2,6 +2,7 @@ use crate::wait_strategy::WaitStrategy;
 use crate::{cell, NexusDetails};
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;
+use core::fmt::Debug;
 use futures::Sink;
 use portable_atomic::Ordering;
 use std::pin::Pin;
@@ -27,6 +28,7 @@ pub struct Sender<T> {
     current_event: Option<Pin<Box<event_listener::EventListener>>>,
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for Sender<T> {}
 
 impl<T> Sender<T> {
@@ -168,26 +170,33 @@ where
     }
 }
 
-impl<T> Sink<T> for Sender<T> {
+impl<T> Sink<T> for Sender<T>
+where
+    T: Send,
+{
     type Error = SendError<T>;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut_self = Pin::get_mut(self);
         unsafe {
             if mut_self.current_cell.is_null() {
-                match (*mut_self.nexus_details.tail_wait_strategy).poll_ptr(
+                let poll = (*mut_self.nexus_details.tail_wait_strategy).poll_ptr(
                     cx,
                     &(*mut_self.nexus_details.tail),
                     &mut mut_self.current_event,
-                ) {
-                    Poll::Ready(ptr) => {
-                        mut_self.current_cell = ptr;
-                    }
-                    Poll::Pending => return Poll::Pending,
+                );
+                if let Poll::Ready(ptr) = poll {
+                    debug_assert!(mut_self.current_event.is_none());
+                    mut_self.current_cell = ptr;
+                } else {
+                    debug_assert!(mut_self.current_event.is_some());
+                    return Poll::Pending;
                 }
             }
+            debug_assert!(!mut_self.current_cell.is_null());
             match (*mut_self.current_cell).poll_write_safe(cx, &mut mut_self.current_event) {
                 Poll::Ready(_) => {
+                    debug_assert!(mut_self.current_event.is_none());
                     let claimed = (*mut_self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
                     mut_self.claimed = claimed;
 
@@ -198,13 +207,17 @@ impl<T> Sink<T> for Sender<T> {
                     (*mut_self.nexus_details.tail_wait_strategy).notify_one();
                     Poll::Ready(Ok(()))
                 }
-                Poll::Pending => Poll::Pending,
+                Poll::Pending => {
+                    debug_assert!(mut_self.current_event.is_some());
+                    Poll::Pending
+                }
             }
         }
     }
 
     fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         debug_assert!(!self.current_cell.is_null());
+        debug_assert!(self.current_event.is_none());
         unsafe {
             (*self.current_cell).write_and_publish(item, self.claimed);
         }

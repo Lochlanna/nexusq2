@@ -80,7 +80,7 @@ pub async fn advanced_test(
 
 async fn sender_thread<S>(num: usize, sender_lag: Duration, average_jitter: f64, mut sender: S) -> S
 where
-    S: Sink<usize> + SinkExt<usize> + Unpin + 'static,
+    S: Sink<usize> + SinkExt<usize> + Unpin + 'static + Debug,
     <S as Sink<usize>>::Error: Debug,
 {
     for i in 0..num {
@@ -106,7 +106,7 @@ async fn receive_thread<S>(
     mut receiver: S,
 ) -> Vec<S::Item>
 where
-    S: Stream + StreamExt + 'static + Unpin,
+    S: Stream + StreamExt + 'static + Unpin + Debug,
 {
     let mut values = Vec::with_capacity(num);
     for _ in 0..(num * num_senders) {

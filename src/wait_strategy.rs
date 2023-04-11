@@ -1,4 +1,5 @@
 use crate::FastMod;
+use core::fmt::Debug;
 use event_listener::EventListener;
 use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::future::Future;
@@ -8,7 +9,7 @@ use std::time::Instant;
 use thiserror::Error as ThisError;
 
 pub trait Waitable {
-    type Inner: Copy;
+    type Inner: Copy + Debug;
     fn check(&self, expected: Self::Inner) -> bool;
 }
 
@@ -252,15 +253,31 @@ impl WaitStrategy for HybridWait {
             *event_listener = None;
             return Poll::Ready(());
         }
-        let listen_guard = match event_listener {
+        #[allow(clippy::option_if_let_else)]
+        let mut listen_guard = match event_listener {
             None => event_listener.insert(self.event.listen()),
             Some(lg) => lg,
         };
-        if waitable.check(expected_value) {
-            *event_listener = None;
-            return Poll::Ready(());
+        debug_assert!(listen_guard.listens_to(&self.event));
+        loop {
+            if waitable.check(expected_value) {
+                *event_listener = None;
+                return Poll::Ready(());
+            }
+            let poll = listen_guard.as_mut().poll(cx);
+            match poll {
+                Poll::Ready(_) => {
+                    if waitable.check(expected_value) {
+                        *event_listener = None;
+                        return Poll::Ready(());
+                    }
+                    listen_guard = event_listener.insert(self.event.listen());
+                }
+                Poll::Pending => {
+                    return Poll::Pending;
+                }
+            }
         }
-        return listen_guard.as_mut().poll(cx);
     }
 
     fn notify_all(&self) {
@@ -281,25 +298,31 @@ impl WaitStrategy for HybridWait {
             *event_listener = None;
             return Poll::Ready(ptr);
         }
-        let listen_guard = match event_listener {
+        #[allow(clippy::option_if_let_else)]
+        let mut listen_guard = match event_listener {
             None => event_listener.insert(self.event.listen()),
             Some(lg) => lg,
         };
-        if let Some(ptr) = ptr.try_take() {
-            *event_listener = None;
-            return Poll::Ready(ptr);
-        }
-        match listen_guard.as_mut().poll(cx) {
-            Poll::Ready(_) => {
+        debug_assert!(listen_guard.listens_to(&self.event));
+
+        loop {
+            if let Some(ptr) = ptr.try_take() {
                 *event_listener = None;
-                let ptr = ptr.try_take();
-                if ptr.is_none() {
+                return Poll::Ready(ptr);
+            }
+            let poll = listen_guard.as_mut().poll(cx);
+            match poll {
+                Poll::Ready(_) => {
+                    if let Some(ptr) = ptr.try_take() {
+                        *event_listener = None;
+                        return Poll::Ready(ptr);
+                    }
+                    listen_guard = event_listener.insert(self.event.listen());
+                }
+                Poll::Pending => {
                     return Poll::Pending;
                 }
-                debug_assert!(ptr.is_some());
-                Poll::Ready(ptr.unwrap())
             }
-            Poll::Pending => Poll::Pending,
         }
     }
 }
