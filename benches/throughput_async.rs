@@ -105,7 +105,7 @@ fn throughput(c: &mut Criterion) {
 
     for num_writers in 1..=max_writers {
         for num_readers in 1..=max_readers {
-            let mut group = c.benchmark_group("throughput");
+            let mut group = c.benchmark_group("throughput-async");
             let input = (num_writers, num_readers);
             group.throughput(Throughput::Elements(
                 num_elements as u64 * num_writers as u64,
