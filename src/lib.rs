@@ -20,7 +20,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use portable_atomic::{AtomicPtr, AtomicUsize};
 
-use crate::wait_strategy::HybridWait;
+use crate::wait_strategy::{HybridWait, Take};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
@@ -70,7 +70,7 @@ impl FastMod for u64 {
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
     tail: *const AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: *const HybridWait,
+    tail_wait_strategy: *const dyn Take<AtomicPtr<cell::Cell<T>>>,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
 }

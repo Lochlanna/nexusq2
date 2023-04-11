@@ -1,4 +1,4 @@
-use crate::wait_strategy::{HybridWait, WaitError, WaitStrategy};
+use crate::wait_strategy::{HybridWait, Wait, WaitError};
 use core::fmt::Debug;
 use event_listener::EventListener;
 use portable_atomic::{AtomicUsize, Ordering};
@@ -12,7 +12,7 @@ pub struct Cell<T> {
     value: UnsafeCell<Option<T>>,
     counter: AtomicUsize,
     current_id: AtomicUsize,
-    wait_strategy: HybridWait,
+    wait_strategy: Box<dyn Wait<AtomicUsize>>,
 }
 
 impl<T> Default for Cell<T> {
@@ -22,7 +22,7 @@ impl<T> Default for Cell<T> {
             value: UnsafeCell::new(None),
             counter: AtomicUsize::new(0),
             current_id: AtomicUsize::new(usize::MAX),
-            wait_strategy: HybridWait::default(),
+            wait_strategy: Box::new(HybridWait::default()),
         }
     }
 }

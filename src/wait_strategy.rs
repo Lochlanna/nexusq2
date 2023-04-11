@@ -38,34 +38,33 @@ impl<T> Takeable for AtomicPtr<T> {
     }
 }
 
-pub trait WaitStrategy {
-    fn wait_for<W: Waitable>(&self, waitable: &W, expected_value: W::Inner);
-    fn wait_until<W: Waitable>(
+pub trait Wait<W: Waitable>: Debug {
+    fn wait_for(&self, waitable: &W, expected_value: W::Inner);
+    fn wait_until(
         &self,
         value: &W,
         expected_value: W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError>;
-    fn poll<W: Waitable>(
+    fn poll(
         &self,
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: W::Inner,
         event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
     ) -> Poll<()>;
-    fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner;
-    fn take_ptr_before<T: Takeable>(
-        &self,
-        ptr: &T,
-        deadline: Instant,
-    ) -> Result<T::Inner, WaitError>;
-    fn poll_ptr<T: Takeable>(
+    fn notify_all(&self);
+}
+
+pub trait Take<T: Takeable>: Debug {
+    fn take_ptr(&self, ptr: &T) -> T::Inner;
+    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
+    fn poll_ptr(
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
         event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
     ) -> Poll<T::Inner>;
-    fn notify_all(&self);
     fn notify_one(&self);
 }
 
@@ -98,8 +97,11 @@ impl Default for HybridWait {
     }
 }
 
-impl WaitStrategy for HybridWait {
-    fn wait_for<W: Waitable>(&self, waitable: &W, expected_value: W::Inner) {
+impl<W> Wait<W> for HybridWait
+where
+    W: Waitable,
+{
+    fn wait_for(&self, waitable: &W, expected_value: W::Inner) {
         for _ in 0..self.num_spin {
             if waitable.check(expected_value) {
                 return;
@@ -128,7 +130,7 @@ impl WaitStrategy for HybridWait {
         }
     }
 
-    fn wait_until<W: Waitable>(
+    fn wait_until(
         &self,
         waitable: &W,
         expected_value: W::Inner,
@@ -172,77 +174,7 @@ impl WaitStrategy for HybridWait {
         }
     }
 
-    fn take_ptr<T: Takeable>(&self, ptr: &T) -> T::Inner {
-        for _ in 0..self.num_spin {
-            if let Some(v) = ptr.try_take() {
-                return v;
-            }
-            core::hint::spin_loop();
-        }
-        for _ in 0..self.num_yield {
-            if let Some(v) = ptr.try_take() {
-                return v;
-            }
-            std::thread::yield_now();
-        }
-        if let Some(v) = ptr.try_take() {
-            return v;
-        }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if let Some(v) = ptr.try_take() {
-                return v;
-            }
-            listen_guard.as_mut().wait();
-            if let Some(v) = ptr.try_take() {
-                return v;
-            }
-        }
-    }
-
-    fn take_ptr_before<T: Takeable>(
-        &self,
-        ptr: &T,
-        deadline: Instant,
-    ) -> Result<T::Inner, WaitError> {
-        for n in 0..self.num_spin {
-            if let Some(v) = ptr.try_take() {
-                return Ok(v);
-            }
-            if n.fast_mod(256) == 0 && Instant::now() >= deadline {
-                return Err(WaitError::Timeout);
-            }
-            core::hint::spin_loop();
-        }
-        for _ in 0..self.num_yield {
-            if let Some(v) = ptr.try_take() {
-                return Ok(v);
-            }
-            if Instant::now() >= deadline {
-                return Err(WaitError::Timeout);
-            }
-            std::thread::yield_now();
-        }
-        if let Some(v) = ptr.try_take() {
-            return Ok(v);
-        }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if let Some(v) = ptr.try_take() {
-                return Ok(v);
-            }
-            if !listen_guard.as_mut().wait_deadline(deadline) {
-                return Err(WaitError::Timeout);
-            }
-            if let Some(v) = ptr.try_take() {
-                return Ok(v);
-            }
-        }
-    }
-
-    fn poll<W: Waitable>(
+    fn poll(
         &self,
         cx: &mut Context<'_>,
         waitable: &W,
@@ -283,12 +215,79 @@ impl WaitStrategy for HybridWait {
     fn notify_all(&self) {
         self.event.notify(usize::MAX);
     }
+}
 
-    fn notify_one(&self) {
-        self.event.notify(1);
+impl<T> Take<T> for HybridWait
+where
+    T: Takeable,
+{
+    fn take_ptr(&self, ptr: &T) -> T::Inner {
+        for _ in 0..self.num_spin {
+            if let Some(v) = ptr.try_take() {
+                return v;
+            }
+            core::hint::spin_loop();
+        }
+        for _ in 0..self.num_yield {
+            if let Some(v) = ptr.try_take() {
+                return v;
+            }
+            std::thread::yield_now();
+        }
+        if let Some(v) = ptr.try_take() {
+            return v;
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        loop {
+            listen_guard.as_mut().listen();
+            if let Some(v) = ptr.try_take() {
+                return v;
+            }
+            listen_guard.as_mut().wait();
+            if let Some(v) = ptr.try_take() {
+                return v;
+            }
+        }
     }
 
-    fn poll_ptr<T: Takeable>(
+    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
+        for n in 0..self.num_spin {
+            if let Some(v) = ptr.try_take() {
+                return Ok(v);
+            }
+            if n.fast_mod(256) == 0 && Instant::now() >= deadline {
+                return Err(WaitError::Timeout);
+            }
+            core::hint::spin_loop();
+        }
+        for _ in 0..self.num_yield {
+            if let Some(v) = ptr.try_take() {
+                return Ok(v);
+            }
+            if Instant::now() >= deadline {
+                return Err(WaitError::Timeout);
+            }
+            std::thread::yield_now();
+        }
+        if let Some(v) = ptr.try_take() {
+            return Ok(v);
+        }
+        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        loop {
+            listen_guard.as_mut().listen();
+            if let Some(v) = ptr.try_take() {
+                return Ok(v);
+            }
+            if !listen_guard.as_mut().wait_deadline(deadline) {
+                return Err(WaitError::Timeout);
+            }
+            if let Some(v) = ptr.try_take() {
+                return Ok(v);
+            }
+        }
+    }
+
+    fn poll_ptr(
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
@@ -324,5 +323,9 @@ impl WaitStrategy for HybridWait {
                 }
             }
         }
+    }
+
+    fn notify_one(&self) {
+        self.event.notify(1);
     }
 }
