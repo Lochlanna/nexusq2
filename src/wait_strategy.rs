@@ -24,14 +24,12 @@ pub trait Notifiable {
 }
 
 pub trait Wait<W: Waitable>: Debug + Notifiable {
-    /// wait for the waitable to have the expected value
+    /// Wait for the waitable to have the expected value.
     ///
     /// # Arguments
     ///
     /// * `waitable`: A waitable object
     /// * `expected_value`: The expected value of the waitable upon completion of the wait
-    ///
-    /// returns: ()
     ///
     /// # Examples
     ///
@@ -56,15 +54,13 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     /// });
     /// ```
     fn wait_for(&self, waitable: &W, expected_value: W::Inner);
-    /// wait for the waitable to have the expected value or until the deadline is reached
+    /// Wait for the waitable to have the expected value or until the deadline is reached.
     ///
     /// # Arguments
     ///
     /// * `waitable`: A reference to an object that can be waited on
     /// * `expected_value`: The expected value of the waitable upon completion of the wait
     /// * `deadline`: The time at which the wait will be aborted
-    ///
-    /// returns: Result<(), [`WaitError`]>
     ///
     /// # Errors
     ///
@@ -106,8 +102,6 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     /// * `waitable`: A reference to an object that can be waited on
     /// * `expected_value`: The expected value of the waitable upon completion of the wait
     /// * `event_listener`: A reference to an event listener that will be used to register the waker
-    ///
-    /// returns: Poll<()>
     fn poll(
         &self,
         cx: &mut Context<'_>,
@@ -118,8 +112,62 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
 }
 
 pub trait Take<T: Takeable>: Debug + Notifiable {
+    /// Wait for the takeable container to contain a value. Take the value, replacing it with the
+    /// default value. This method will block indefinitely.
+    ///
+    /// # Arguments
+    ///
+    /// * `ptr`: A reference to an object that can be taken from
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use nexusq2::wait_strategy::{HybridWait, Take, Takeable, Notifiable};
+    ///# use portable_atomic::{AtomicPtr, Ordering};
+    /// let wait = HybridWait::new(50, 50);
+    /// let t = AtomicPtr::new(Box::into_raw(Box::new(1)));
+    /// let ptr = wait.take_ptr(&t);
+    /// assert!(!ptr.is_null());
+    /// // We shouldn't be able to take the pointer while it's being held
+    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
+    /// // put the pointer back in the takeable container
+    /// t.store(ptr, Ordering::Release);
+    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
+    /// ```
     fn take_ptr(&self, ptr: &T) -> T::Inner;
+    /// Wait for the takeable container to contain a value. Take the value, replacing it with the
+    /// default value. This method will block until the deadline is reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `ptr`: A reference to an object that can be taken from
+    /// * `deadline`: The time at which the wait will be aborted
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use nexusq2::wait_strategy::{HybridWait, Take, Takeable, Notifiable};
+    /// # use portable_atomic::{AtomicPtr, Ordering};
+    /// let wait = HybridWait::new(50, 50);
+    /// let t = AtomicPtr::new(Box::into_raw(Box::new(1)));
+    /// let ptr = wait.take_ptr(&t);
+    /// assert!(!ptr.is_null());
+    /// // We shouldn't be able to take the pointer while it's being held
+    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
+    /// // put the pointer back in the takeable container
+    /// t.store(ptr, Ordering::Release);
+    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
+    /// ```
     fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
+
+    /// Returns immediately with the valid inside takeable if there is one otherwise
+    /// it registers the waker to wake the thread when the next notification is triggered.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx`: The current context
+    /// * `ptr`: A reference to an object that can be taken from
+    /// * `event_listener`: A reference to an event listener that will be used to register the waker
     fn poll_ptr(
         &self,
         cx: &mut Context<'_>,
