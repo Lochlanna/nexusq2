@@ -53,9 +53,9 @@ rpath = false
 name = "throughput"
 harness = false
 
-#[[bench]]
-#name = "throughput_async"
-#harness = false
+[[bench]]
+name = "throughput_async"
+harness = false
 
 
 #[[bench]]
