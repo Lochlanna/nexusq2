@@ -13,17 +13,127 @@ pub trait Waitable {
     fn check(&self, expected: Self::Inner) -> bool;
 }
 
+pub trait Takeable {
+    type Inner: Copy;
+    fn try_take(&self) -> Option<Self::Inner>;
+}
+
+pub trait Notifiable {
+    fn notify_all(&self);
+    fn notify_one(&self);
+}
+
+pub trait Wait<W: Waitable>: Debug + Notifiable {
+    /// wait for the waitable to have the expected value
+    ///
+    /// # Arguments
+    ///
+    /// * `waitable`: A waitable object
+    /// * `expected_value`: The expected value of the waitable upon completion of the wait
+    ///
+    /// returns: ()
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use std::sync::Arc;
+    ///# use std::thread;
+    ///# use portable_atomic::AtomicUsize;
+    ///# use nexusq2::wait_strategy::{HybridWait, Wait, Waitable, Notifiable};
+    /// let wait = HybridWait::new(50, 50);
+    /// let x = AtomicUsize::new(0);
+    /// //spawn a scoped thread that waits for x to be 1 using wait
+    /// thread::scope(|s| {
+    ///     let handle = s.spawn(||{
+    ///         wait.wait_for(&x, 1);
+    ///     });
+    ///     //wait for the thread to start
+    ///     thread::sleep(std::time::Duration::from_millis(50));
+    ///     x.store(1, std::sync::atomic::Ordering::Release);
+    ///     //notify the wait strategy
+    ///     wait.notify_all();
+    ///     handle.join().expect("couldn't join thread!")
+    /// });
+    /// ```
+    fn wait_for(&self, waitable: &W, expected_value: W::Inner);
+    /// wait for the waitable to have the expected value or until the deadline is reached
+    ///
+    /// # Arguments
+    ///
+    /// * `waitable`: A reference to an object that can be waited on
+    /// * `expected_value`: The expected value of the waitable upon completion of the wait
+    /// * `deadline`: The time at which the wait will be aborted
+    ///
+    /// returns: Result<(), [`WaitError`]>
+    ///
+    /// # Errors
+    ///
+    /// * [`WaitError::Timeout`]: The wait timed out before the waitable had the expected value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use std::sync::Arc;
+    ///# use std::thread;
+    ///# use std::time::{Duration, Instant};
+    ///# use portable_atomic::AtomicUsize;
+    ///# use nexusq2::wait_strategy::{HybridWait, Wait, Waitable, Notifiable};
+    /// let wait = HybridWait::new(50, 50);
+    /// let x = AtomicUsize::new(0);
+    /// //spawn a scoped thread that waits for x to be 1 using wait
+    /// thread::scope(|s| {
+    ///     let handle = s.spawn(||{
+    ///         assert!(wait.wait_until(&x, 1, Instant::now() + Duration::from_millis(10)).is_err());
+    ///     });
+    ///     //wait for the thread to start
+    ///     thread::sleep(Duration::from_millis(50));
+    ///     assert!(handle.is_finished());
+    /// });
+    /// ```
+    fn wait_until(
+        &self,
+        waitable: &W,
+        expected_value: W::Inner,
+        deadline: Instant,
+    ) -> Result<(), WaitError>;
+
+    /// Returns immediately if waitable matches expected value otherwise it registers the waker to
+    /// wake the thread when the next notification is triggered
+    ///
+    /// # Arguments
+    ///
+    /// * `cx`: The current context
+    /// * `waitable`: A reference to an object that can be waited on
+    /// * `expected_value`: The expected value of the waitable upon completion of the wait
+    /// * `event_listener`: A reference to an event listener that will be used to register the waker
+    ///
+    /// returns: Poll<()>
+    fn poll(
+        &self,
+        cx: &mut Context<'_>,
+        waitable: &W,
+        expected_value: W::Inner,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
+    ) -> Poll<()>;
+}
+
+pub trait Take<T: Takeable>: Debug + Notifiable {
+    fn take_ptr(&self, ptr: &T) -> T::Inner;
+    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
+    fn poll_ptr(
+        &self,
+        cx: &mut Context<'_>,
+        ptr: &T,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
+    ) -> Poll<T::Inner>;
+}
+
 impl Waitable for AtomicUsize {
     type Inner = usize;
 
     fn check(&self, expected: Self::Inner) -> bool {
         self.load(Ordering::Acquire) == expected
     }
-}
-
-pub trait Takeable {
-    type Inner: Copy;
-    fn try_take(&self) -> Option<Self::Inner>;
 }
 
 impl<T> Takeable for AtomicPtr<T> {
@@ -36,36 +146,6 @@ impl<T> Takeable for AtomicPtr<T> {
         }
         Some(v)
     }
-}
-
-pub trait Wait<W: Waitable>: Debug {
-    fn wait_for(&self, waitable: &W, expected_value: W::Inner);
-    fn wait_until(
-        &self,
-        value: &W,
-        expected_value: W::Inner,
-        deadline: Instant,
-    ) -> Result<(), WaitError>;
-    fn poll(
-        &self,
-        cx: &mut Context<'_>,
-        waitable: &W,
-        expected_value: W::Inner,
-        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
-    ) -> Poll<()>;
-    fn notify_all(&self);
-}
-
-pub trait Take<T: Takeable>: Debug {
-    fn take_ptr(&self, ptr: &T) -> T::Inner;
-    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
-    fn poll_ptr(
-        &self,
-        cx: &mut Context<'_>,
-        ptr: &T,
-        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
-    ) -> Poll<T::Inner>;
-    fn notify_one(&self);
 }
 
 #[derive(Debug, ThisError)]
@@ -88,6 +168,45 @@ impl Clone for HybridWait {
 }
 
 impl HybridWait {
+    /// Create a new HybridWait. HybridWait is a wait strategy that will spin for a number of times.
+    /// If the condition is not met it will yield the cpu for a number of times. If the condition is
+    /// still not met it will wait on an event listener.
+    ///
+    /// # Arguments
+    ///
+    /// * `num_spin`: number of times to spin
+    /// * `num_yield`: number of times to yield the cpu
+    ///
+    /// returns: [`HybridWait`]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use std::sync::Arc;
+    ///# use std::thread;
+    ///# use portable_atomic::AtomicUsize;
+    ///# use nexusq2::wait_strategy::{HybridWait, Wait, Waitable, Notifiable};
+    /// let wait = HybridWait::new(50, 50);
+    /// let x = AtomicUsize::new(0);
+    /// //spawn a scoped thread that waits for x to be 1 using wait
+    /// thread::scope(|s| {
+    ///     let handle = s.spawn(||{
+    ///         wait.wait_for(&x, 1);
+    ///     });
+    ///     //wait for the thread to start
+    ///     thread::sleep(std::time::Duration::from_millis(50));
+    ///     //check that the thread is not finished
+    ///     assert!(!handle.is_finished());
+    ///     //set x to 1
+    ///     x.store(1, std::sync::atomic::Ordering::Release);
+    ///     //notify the wait strategy
+    ///     wait.notify_all();
+    ///     //check that the thread is finished
+    ///     thread::sleep(std::time::Duration::from_millis(10));
+    ///     assert!(handle.is_finished());
+    /// });
+    /// ```
+    #[must_use]
     pub const fn new(num_spin: u64, num_yield: u64) -> Self {
         Self {
             num_spin,
@@ -100,6 +219,15 @@ impl HybridWait {
 impl Default for HybridWait {
     fn default() -> Self {
         Self::new(50, 50)
+    }
+}
+
+impl Notifiable for HybridWait {
+    fn notify_all(&self) {
+        self.event.notify(usize::MAX);
+    }
+    fn notify_one(&self) {
+        self.event.notify(1);
     }
 }
 
@@ -217,10 +345,6 @@ where
             }
         }
     }
-
-    fn notify_all(&self) {
-        self.event.notify(usize::MAX);
-    }
 }
 
 impl<T> Take<T> for HybridWait
@@ -329,9 +453,5 @@ where
                 }
             }
         }
-    }
-
-    fn notify_one(&self) {
-        self.event.notify(1);
     }
 }

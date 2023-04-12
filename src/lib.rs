@@ -14,16 +14,16 @@ extern crate core;
 mod cell;
 mod receiver;
 mod sender;
-mod wait_strategy;
+pub mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use portable_atomic::{AtomicPtr, AtomicUsize};
 use thiserror::Error as ThisError;
 
-use crate::wait_strategy::{HybridWait, Take, Wait};
 pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
+use wait_strategy::{HybridWait, Take, Wait};
 
 pub(crate) trait FastMod {
     #[must_use]
