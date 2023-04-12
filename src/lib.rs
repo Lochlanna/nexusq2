@@ -6,14 +6,14 @@
 //! and lock-free. While there are no locks used to syncronsise data, writes are serialised through
 //! a shared token. Increasing the number of producers will most likley not result in higher overall
 //! throughput. Readers operate entirely in parallael without locks.
-//! 
+//!
 //! The way that producers and consumers wait for a cell to become available to read or write is through
 //! wait stratagies. This crate provides a couple and defaults to the use of the hybrid wait strategy.
-//! For most users the hybrid wait strategy will be fine providing a good balance between spinning and 
+//! For most users the hybrid wait strategy will be fine providing a good balance between spinning and
 //! blocking that will provide low latency where possible without burning CPU time thanks to thread parking.
-//! 
-//! Async will most likely exibit higher performance in situations where blocking is required thanks to the 
-//! cheap sleep/wake that async makes available. 
+//!
+//! Async will most likely exibit higher performance in situations where blocking is required thanks to the
+//! cheap sleep/wake that async makes available.
 //!
 //! ## Usage
 //!
@@ -22,11 +22,11 @@
 //!
 //! The channel is then used by sending and receiving values using the [`Sender`] and [`Receiver`]
 //! types respectively.
-//! 
+//!
 //! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] API's repectivly giving them async compatability.
 //!
 //! ```
-//! let (sender, mut receiver) = nexusq::make_channel(4).expect("couldn't construct channel");
+//! let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
 //! sender.send(42).expect("couldn't send");
 //! sender.send(2).expect("couldn't send");
 //! assert_eq!(receiver.recv(), 42);
@@ -58,7 +58,7 @@ use thiserror::Error as ThisError;
 
 pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
-use wait_strategy::{HybridWait, Take, Wait};
+use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
 pub(crate) trait FastMod {
     #[must_use]
@@ -219,7 +219,7 @@ pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferEr
 /// # Examples
 ///
 /// ```
-/// use nexusq2::wait_strategy::HybridWait;
+/// use nexusq2::wait_strategy::hybrid::HybridWait;
 /// let (sender, mut receiver) = nexusq2::make_channel_with(4, HybridWait::default(), HybridWait::default).expect("couldn't construct channel");
 /// sender.send(42).expect("couldn't send");
 /// assert_eq!(receiver.recv(), 42);
