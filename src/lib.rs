@@ -160,15 +160,45 @@ impl<T> NexusQ<T> {
 ///
 /// ```
 /// let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
-/// sender.send(1).expect("couldn't send");
+/// sender.send(42).expect("couldn't send");
 /// sender.send(2).expect("couldn't send");
-/// sender.send(3).expect("couldn't send");
-/// assert_eq!(receiver.recv(), 1);
+/// assert_eq!(receiver.recv(), 42);
 /// assert_eq!(receiver.recv(), 2);
-/// assert_eq!(receiver.recv(), 3);
 /// ```
 pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferError> {
-    let nexus = Arc::new(NexusQ::new(size)?);
+    make_channel_with(size, HybridWait::default(), HybridWait::default)
+}
+
+/// Create a new nexusq channel with a buffer of the given size and given wait strategies
+///
+/// # Arguments
+///
+/// * `size`: The size of the channel buffer. This must be at least 2, and no larger than [`isize::MAX`]
+/// * `writer_ws`: An instance of a wait strategy for the writers to use to wait on each other
+/// * `reader_ws`: A function that produces wait strategies which are used to wait on the readers
+///
+/// # Errors
+/// - [`BufferError::BufferTooSmall`] if the buffer size is less than 2
+/// - [`BufferError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
+///
+/// # Examples
+///
+/// ```
+/// use nexusq2::wait_strategy::HybridWait;
+/// let (sender, mut receiver) = nexusq2::make_channel_with(4, HybridWait::default(), HybridWait::default).expect("couldn't construct channel");
+/// sender.send(42).expect("couldn't send");
+/// assert_eq!(receiver.recv(), 42);
+/// ```
+pub fn make_channel_with<T, W, R>(
+    size: usize,
+    writer_ws: W,
+    reader_ws: impl Fn() -> R,
+) -> Result<(Sender<T>, Receiver<T>), BufferError>
+where
+    W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
+    R: Wait<AtomicUsize> + 'static + Clone,
+{
+    let nexus = Arc::new(NexusQ::with_strategies(size, writer_ws, reader_ws)?);
     let receiver = Receiver::new(Arc::clone(&nexus));
     let sender = Sender::new(nexus);
     Ok((sender, receiver))
