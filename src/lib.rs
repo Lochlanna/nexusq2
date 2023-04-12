@@ -71,19 +71,16 @@ struct NexusDetails<T> {
     tail_wait_strategy: *const dyn Take<AtomicPtr<cell::Cell<T>>>,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
+    num_receivers: *const AtomicUsize,
 }
 
-// Why can't we derive this?
 impl<T> Copy for NexusDetails<T> {}
 
-// Why can't we derive this?
 impl<T> Clone for NexusDetails<T> {
     fn clone(&self) -> Self {
         *self
     }
 }
-
-unsafe impl<T> Send for NexusDetails<T> {}
 
 #[derive(Debug)]
 struct NexusQ<T> {
@@ -94,10 +91,6 @@ struct NexusQ<T> {
     tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>>>,
     num_receivers: AtomicUsize,
 }
-
-#[allow(clippy::non_send_fields_in_send_ty)]
-unsafe impl<T> Send for NexusQ<T> {}
-unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> NexusQ<T> {
     fn new(size: usize) -> Result<Self, BufferError> {
@@ -146,6 +139,7 @@ impl<T> NexusQ<T> {
             tail_wait_strategy: Box::as_ref(&self.tail_wait_strategy),
             buffer_raw: self.buffer_raw,
             buffer_length: self.buffer.len(),
+            num_receivers: &self.num_receivers,
         }
     }
 }
@@ -252,7 +246,11 @@ mod tests {
 
     #[test]
     fn send_without_receiver_fails() {
-        let (sender, _) = make_channel(4).expect("couldn't construct channel");
+        let (sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
+        sender.send(1).expect("couldn't send");
+        sender.send(2).expect("couldn't send");
+        assert_eq!(receiver.recv(), 1);
+        drop(receiver);
         assert_eq!(sender.send(1), Err(SendError::Disconnected(1)));
     }
 

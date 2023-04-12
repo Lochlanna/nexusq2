@@ -89,10 +89,10 @@ where
     /// assert_eq!(receiver.recv(), 2);
     /// ```
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Err(SendError::Disconnected(value));
-        }
         unsafe {
+            if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
+                return Err(SendError::Disconnected(value));
+            }
             let cell =
                 (*self.nexus_details.tail_wait_strategy).take_ptr(&(*self.nexus_details.tail));
 
@@ -136,10 +136,10 @@ where
     /// assert_eq!(receiver.recv(), 3);
     /// ```
     pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
-        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Err(SendError::Disconnected(value));
-        }
         unsafe {
+            if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
+                return Err(SendError::Disconnected(value));
+            }
             let cell = (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
 
             if cell.is_null() {
@@ -195,13 +195,13 @@ where
     /// assert_eq!(receiver.recv(), 3);
     /// ```
     pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
-        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Err(SendError::Disconnected(value));
-        }
-        if deadline < Instant::now() {
-            return Err(SendError::Timeout(value));
-        }
         unsafe {
+            if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
+                return Err(SendError::Disconnected(value));
+            }
+            if deadline < Instant::now() {
+                return Err(SendError::Timeout(value));
+            }
             let Ok(cell) = (*self.nexus_details.tail_wait_strategy)
                 .take_ptr_before(&(*self.nexus_details.tail), deadline) else { return Err(SendError::Timeout(value)) };
             if (*cell).wait_for_write_safe_before(deadline).is_err() {

@@ -97,9 +97,9 @@ fn nexus(
 #[test]
 #[ignore]
 fn profile() {
-    let num = 100000;
+    let num = 50000;
     // let num = 1000;
-    let writers = 1;
+    let writers = 2;
     let readers = 2;
     let iterations = 500;
 
