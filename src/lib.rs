@@ -56,6 +56,7 @@ use alloc::vec::Vec;
 use portable_atomic::{AtomicPtr, AtomicUsize};
 use thiserror::Error as ThisError;
 
+use crate::wait_strategy::AsyncEventGuard;
 pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
@@ -123,7 +124,7 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicUsize,
     tail: AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>>>,
+    tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>, Guard = dyn AsyncEventGuard>>,
     num_receivers: AtomicUsize,
 }
 

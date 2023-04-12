@@ -99,7 +99,7 @@ where
         if waitable.check(expected_value) {
             return;
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let mut listen_guard = Box::pin(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
@@ -141,7 +141,7 @@ where
         if waitable.check(expected_value) {
             return Ok(());
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let mut listen_guard = Box::pin(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
@@ -215,7 +215,7 @@ where
         if let Some(v) = ptr.try_take() {
             return v;
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let mut listen_guard = Box::pin(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {
@@ -250,7 +250,7 @@ where
         if let Some(v) = ptr.try_take() {
             return Ok(v);
         }
-        let mut listen_guard = Box::pin(event_listener::EventListener::new(&self.event));
+        let mut listen_guard = Box::pin(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {
@@ -269,7 +269,7 @@ where
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
-        event_listener: &mut Option<Pin<Box<event_listener::EventListener>>>,
+        event_listener: &mut Option<Pin<Box<EventListener>>>,
     ) -> Poll<T::Inner> {
         if let Some(ptr) = ptr.try_take() {
             *event_listener = None;
@@ -302,4 +302,8 @@ where
             }
         }
     }
+}
+
+impl AsyncEventGuardFactory for HybridWait {
+    type Guard = Pin<Box<EventListener>>;
 }

@@ -10,6 +10,17 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
+pub trait AsyncEventGuard {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+}
+
+pub trait AsyncEventGuardFactory {
+    type Guard: AsyncEventGuard;
+    fn new_event() -> Option<Self::Guard> {
+        None
+    }
+}
+
 pub trait Waitable {
     type Inner: Copy + Debug;
     fn check(&self, expected: Self::Inner) -> bool;
@@ -25,7 +36,7 @@ pub trait Notifiable {
     fn notify_one(&self);
 }
 
-pub trait Wait<W: Waitable>: Debug + Notifiable {
+pub trait Wait<W: Waitable>: Debug + Notifiable + AsyncEventGuardFactory {
     /// Wait for the waitable to have the expected value.
     ///
     /// # Arguments
@@ -109,11 +120,11 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: W::Inner,
-        event_listener: &mut Option<Pin<Box<EventListener>>>,
+        event_listener: &mut Option<Self::Guard>,
     ) -> Poll<()>;
 }
 
-pub trait Take<T: Takeable>: Debug + Notifiable {
+pub trait Take<T: Takeable>: Debug + Notifiable + AsyncEventGuardFactory {
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block indefinitely.
     ///
@@ -178,7 +189,7 @@ pub trait Take<T: Takeable>: Debug + Notifiable {
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
-        event_listener: &mut Option<Pin<Box<EventListener>>>,
+        event_listener: &mut Option<Self::Guard>,
     ) -> Poll<T::Inner>;
 }
 
@@ -199,6 +210,12 @@ impl<T> Takeable for AtomicPtr<T> {
             return None;
         }
         Some(v)
+    }
+}
+
+impl AsyncEventGuard for Pin<Box<EventListener>> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.as_mut().poll(cx)
     }
 }
 

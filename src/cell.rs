@@ -1,4 +1,4 @@
-use crate::wait_strategy::{hybrid::HybridWait, Wait, WaitError};
+use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::Debug;
 use event_listener::EventListener;
 use portable_atomic::{AtomicUsize, Ordering};
