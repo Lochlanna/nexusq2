@@ -35,7 +35,9 @@ where
     T: Send,
 {
     fn test_send(&mut self, value: T) {
-        self.send(value);
+        if self.send(value).is_err() {
+            panic!("couldn't send");
+        }
     }
 
     fn another(&self) -> Self {

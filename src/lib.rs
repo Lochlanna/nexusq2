@@ -22,17 +22,16 @@ use portable_atomic::{AtomicPtr, AtomicUsize};
 use thiserror::Error as ThisError;
 
 use crate::wait_strategy::{HybridWait, Take, Wait};
-pub use receiver::Receiver;
-pub use sender::Sender;
+pub use receiver::{Receiver, RecvError};
+pub use sender::{SendError, Sender};
 
-pub trait FastMod {
+pub(crate) trait FastMod {
     #[must_use]
     fn fast_mod(&self, denominator: Self) -> Self;
     #[must_use]
     fn maybe_next_power_of_two(&self) -> Self;
 }
 
-#[cfg(feature = "fast-mod")]
 impl FastMod for usize {
     fn fast_mod(&self, denominator: Self) -> Self {
         debug_assert!(denominator > 0);
@@ -42,16 +41,6 @@ impl FastMod for usize {
 
     fn maybe_next_power_of_two(&self) -> Self {
         self.next_power_of_two()
-    }
-}
-
-#[cfg(not(feature = "fast-mod"))]
-impl FastMod for usize {
-    fn fast_mod(&self, denominator: Self) -> Self {
-        *self % denominator
-    }
-    fn maybe_next_power_of_two(&self) -> Self {
-        *self
     }
 }
 
@@ -90,13 +79,7 @@ impl<T> Copy for NexusDetails<T> {}
 // Why can't we derive this?
 impl<T> Clone for NexusDetails<T> {
     fn clone(&self) -> Self {
-        Self {
-            claimed: self.claimed,
-            tail: self.tail,
-            tail_wait_strategy: self.tail_wait_strategy,
-            buffer_raw: self.buffer_raw,
-            buffer_length: self.buffer_length,
-        }
+        *self
     }
 }
 
@@ -109,6 +92,7 @@ struct NexusQ<T> {
     claimed: AtomicUsize,
     tail: AtomicPtr<cell::Cell<T>>,
     tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>>>,
+    num_receivers: AtomicUsize,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -117,10 +101,14 @@ unsafe impl<T> Sync for NexusQ<T> {}
 
 impl<T> NexusQ<T> {
     fn new(size: usize) -> Result<Self, BufferError> {
-        Self::with_strategies(size, HybridWait::default(), HybridWait::default())
+        Self::with_strategies(size, HybridWait::default(), HybridWait::default)
     }
 
-    fn with_strategies<W, R>(size: usize, writer_ws: W, reader_ws: R) -> Result<Self, BufferError>
+    fn with_strategies<W, R>(
+        size: usize,
+        writer_ws: W,
+        reader_ws: impl Fn() -> R,
+    ) -> Result<Self, BufferError>
     where
         W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
         R: Wait<AtomicUsize> + 'static + Clone,
@@ -135,7 +123,7 @@ impl<T> NexusQ<T> {
 
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
-        buffer.resize_with(size, || cell::Cell::new(reader_ws.clone()));
+        buffer.resize_with(size, || cell::Cell::new(reader_ws()));
 
         let buffer_raw = buffer.as_mut_ptr();
 
@@ -146,6 +134,7 @@ impl<T> NexusQ<T> {
                 claimed: AtomicUsize::new(1),
                 tail: AtomicPtr::new(buffer_raw.add(1)),
                 tail_wait_strategy: Box::new(writer_ws),
+                num_receivers: AtomicUsize::new(0),
             })
         }
     }
@@ -161,6 +150,29 @@ impl<T> NexusQ<T> {
     }
 }
 
+/// Create a new nexusq channel with a buffer of the given size.
+/// This function will initialise the channel using the default [`HybridWait`] wait strategies
+/// for both the sender and receiver.
+///
+/// # Arguments
+///
+/// * `size`: The size of the channel buffer. This must be at least 2, and no larger than [`isize::MAX`]
+///
+/// # Errors
+/// - [`BufferError::BufferTooSmall`] if the buffer size is less than 2
+/// - [`BufferError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
+///
+/// # Examples
+///
+/// ```
+/// let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
+/// sender.send(1).expect("couldn't send");
+/// sender.send(2).expect("couldn't send");
+/// sender.send(3).expect("couldn't send");
+/// assert_eq!(receiver.recv(), 1);
+/// assert_eq!(receiver.recv(), 2);
+/// assert_eq!(receiver.recv(), 3);
+/// ```
 pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferError> {
     let nexus = Arc::new(NexusQ::new(size)?);
     let receiver = Receiver::new(Arc::clone(&nexus));
@@ -177,15 +189,15 @@ mod tests {
     #[test]
     fn basic_channel() {
         let (sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
-        sender.send(1);
-        sender.send(2);
-        sender.send(3);
+        sender.send(1).expect("couldn't send");
+        sender.send(2).expect("couldn't send");
+        sender.send(3).expect("couldn't send");
         assert_eq!(receiver.recv(), 1);
         assert_eq!(receiver.recv(), 2);
         assert_eq!(receiver.recv(), 3);
-        sender.send(4);
-        sender.send(5);
-        sender.send(6);
+        sender.send(4).expect("couldn't send");
+        sender.send(5).expect("couldn't send");
+        sender.send(6).expect("couldn't send");
         assert_eq!(receiver.recv(), 4);
         assert_eq!(receiver.recv(), 5);
         assert_eq!(receiver.recv(), 6);
@@ -239,13 +251,31 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn try_send_to_full_fails() {
+    fn send_without_receiver_fails() {
         let (sender, _) = make_channel(4).expect("couldn't construct channel");
-        sender.try_send(1).unwrap();
-        sender.try_send(2).unwrap();
-        sender.try_send(3).unwrap();
-        sender.try_send(4).unwrap();
+        assert_eq!(sender.send(1), Err(SendError::Disconnected(1)));
+    }
+
+    #[test]
+    fn buffer_min_size() {
+        assert_eq!(
+            make_channel::<()>(0).unwrap_err(),
+            BufferError::BufferTooSmall
+        );
+        assert_eq!(
+            make_channel::<()>(1).unwrap_err(),
+            BufferError::BufferTooSmall
+        );
+        assert!(make_channel::<()>(2).is_ok());
+    }
+
+    #[test]
+    fn buffer_too_big() {
+        assert_eq!(
+            make_channel::<()>(isize::MAX as usize + 1).unwrap_err(),
+            BufferError::BufferTooLarge
+        );
+        //Don't actually test a valid but extremely large buffer as that would kill ram for tests...
     }
 }
 
@@ -280,10 +310,14 @@ mod drop_tests {
         let counter = Arc::default();
         let (sender, mut receiver) = make_channel(16).expect("couldn't construct channel");
         for _ in 0..15 {
-            sender.send(CustomDropper::new(&counter));
+            sender
+                .send(CustomDropper::new(&counter))
+                .expect("couldn't send");
         }
         receiver.recv();
-        sender.send(CustomDropper::new(&counter));
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
         drop(receiver);
         drop(sender);
         assert_eq!(counter.load(Ordering::Relaxed), 17);
@@ -292,11 +326,14 @@ mod drop_tests {
     #[test]
     fn valid_drop_partial_buffer() {
         let counter = Arc::default();
-        let (sender, _) = make_channel(16).expect("couldn't construct channel");
+        let (sender, receiver) = make_channel(16).expect("couldn't construct channel");
         for _ in 0..3 {
-            sender.send(CustomDropper::new(&counter));
+            sender
+                .send(CustomDropper::new(&counter))
+                .expect("couldn't send");
         }
         drop(sender);
+        drop(receiver);
         assert_eq!(counter.load(Ordering::Acquire), 3);
     }
 
@@ -311,18 +348,30 @@ mod drop_tests {
         let counter = Arc::default();
         let (sender, mut receiver) =
             make_channel::<CustomDropper>(4).expect("couldn't construct channel");
-        sender.send(CustomDropper::new(&counter));
-        sender.send(CustomDropper::new(&counter));
-        sender.send(CustomDropper::new(&counter));
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
         receiver.recv();
         receiver.recv();
         receiver.recv();
         assert_eq!(counter.load(Ordering::Acquire), 3);
-        sender.send(CustomDropper::new(&counter));
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
         assert_eq!(counter.load(Ordering::Acquire), 3);
-        sender.send(CustomDropper::new(&counter));
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
         assert_eq!(counter.load(Ordering::Acquire), 4);
-        sender.send(CustomDropper::new(&counter));
+        sender
+            .send(CustomDropper::new(&counter))
+            .expect("couldn't send");
         assert_eq!(counter.load(Ordering::Acquire), 5);
         //TODO fix this so that it can be filled!
         // sender.send(CustomDropper::new(&counter));

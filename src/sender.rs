@@ -9,12 +9,20 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
-#[derive(Debug, ThisError)]
+#[derive(Debug, ThisError, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
 pub enum SendError<T> {
     #[error("channel is full")]
     Full(T),
     #[error("timeout while waiting for write slot to become available")]
     Timeout(T),
+    #[error("there are no more receivers. The channel is disconnected")]
+    Disconnected(T),
+}
+
+#[derive(Debug, ThisError)]
+pub enum AsyncSendError {
+    #[error("there are no more receivers. The channel is disconnected")]
+    Disconnected,
 }
 
 #[derive(Debug)]
@@ -61,8 +69,29 @@ impl<T> Sender<T>
 where
     T: Send,
 {
-    /// Send a value to the channel. This method will block until a slot becomes available.
-    pub fn send(&self, value: T) {
+    /// Send a value to the channel. This function will block until the value is sent.
+    ///
+    /// # Arguments
+    ///
+    /// * `value`: The value to be sent to the channel
+    ///
+    /// # Errors
+    /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use nexusq2::make_channel;
+    /// let (sender, mut receiver) = make_channel(5).expect("Failed to make channel");
+    /// sender.send(1).expect("Failed to send");
+    /// sender.send(2).expect("Failed to send");
+    /// assert_eq!(receiver.recv(), 1);
+    /// assert_eq!(receiver.recv(), 2);
+    /// ```
+    pub fn send(&self, value: T) -> Result<(), SendError<T>> {
+        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Err(SendError::Disconnected(value));
+        }
         unsafe {
             let cell =
                 (*self.nexus_details.tail_wait_strategy).take_ptr(&(*self.nexus_details.tail));
@@ -79,6 +108,7 @@ where
             (*self.nexus_details.tail_wait_strategy).notify_one();
 
             (*cell).write_and_publish(value, claimed);
+            Ok(())
         }
     }
 
@@ -92,16 +122,23 @@ where
     /// # Errors
     /// - [`SendError::Full`] The channel is currently full and cannot accept a new value. The value given
     /// to the send function is returned in the error.
+    /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
     /// # Examples
-    ///
     /// ```
-    /// let (mut sender, _) = nexusq2::make_channel(3).expect("couldn't construct channel");
+    ///# use nexusq2::{make_channel, SendError};
+    /// let (mut sender, mut receiver) = make_channel(3).expect("couldn't construct channel");
     /// sender.try_send(1).expect("this should be fine");
     /// sender.try_send(2).expect("this should be fine");
     /// sender.try_send(3).expect("this should be fine");
-    /// assert!(sender.try_send(4).is_err())
+    /// assert_eq!(sender.try_send(4), Err(SendError::Full(4)));
+    /// assert_eq!(receiver.recv(), 1);
+    /// assert_eq!(receiver.recv(), 2);
+    /// assert_eq!(receiver.recv(), 3);
     /// ```
     pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
+        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Err(SendError::Disconnected(value));
+        }
         unsafe {
             let cell = (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
 
@@ -143,12 +180,30 @@ where
     ///
     /// # Errors
     /// - [`SendError::Timeout`] The value couldn't be sent before the deadline.
-    /// The value is contained within the error.
+    /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
+    /// # Examples
+    /// ```
+    ///# use std::time::{Duration, Instant};
+    ///# use nexusq2::{make_channel, SendError};
+    /// let (mut sender, mut receiver) = make_channel(3).expect("couldn't construct channel");
+    /// sender.try_send_before(1, Instant::now() + Duration::from_secs(1)).expect("this should be fine");
+    /// sender.try_send_before(2, Instant::now() + Duration::from_secs(1)).expect("this should be fine");
+    /// sender.try_send_before(3, Instant::now() + Duration::from_secs(1)).expect("this should be fine");
+    /// assert_eq!(sender.try_send_before(4, Instant::now() + Duration::from_millis(10)), Err(SendError::Timeout(4)));
+    /// assert_eq!(receiver.recv(), 1);
+    /// assert_eq!(receiver.recv(), 2);
+    /// assert_eq!(receiver.recv(), 3);
+    /// ```
     pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
+        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Err(SendError::Disconnected(value));
+        }
+        if deadline < Instant::now() {
+            return Err(SendError::Timeout(value));
+        }
         unsafe {
             let Ok(cell) = (*self.nexus_details.tail_wait_strategy)
                 .take_ptr_before(&(*self.nexus_details.tail), deadline) else { return Err(SendError::Timeout(value)) };
-
             if (*cell).wait_for_write_safe_before(deadline).is_err() {
                 (*self.nexus_details.tail).store(cell, Ordering::Release);
                 return Err(SendError::Timeout(value));
@@ -173,11 +228,15 @@ impl<T> Sink<T> for Sender<T>
 where
     T: Send,
 {
-    type Error = SendError<T>;
+    type Error = AsyncSendError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Poll::Ready(Err(AsyncSendError::Disconnected));
+        }
         let mut_self = Pin::get_mut(self);
         unsafe {
+            //claim the pointer first
             if mut_self.current_cell.is_null() {
                 let poll = (*mut_self.nexus_details.tail_wait_strategy).poll_ptr(
                     cx,
@@ -192,6 +251,8 @@ where
                     return Poll::Pending;
                 }
             }
+
+            //wait for the cell to become available for writing
             debug_assert!(!mut_self.current_cell.is_null());
             match (*mut_self.current_cell).poll_write_safe(cx, &mut mut_self.current_event) {
                 Poll::Ready(_) => {

@@ -2,14 +2,15 @@ use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
 use alloc::sync::Arc;
 use core::fmt::Debug;
 use std::pin::Pin;
+use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
-#[derive(Debug, ThisError)]
-pub enum Error {
+#[derive(Debug, ThisError, PartialOrd, PartialEq, Ord, Eq, Clone, Copy)]
+pub enum RecvError {
     #[error("timeout while waiting for next value to become available")]
-    Timeout(#[from] crate::wait_strategy::WaitError),
+    Timeout,
     #[error("there's no new data available to be read")]
     NoNewData,
 }
@@ -32,6 +33,7 @@ impl<T> Receiver<T> {
         let nexus_details = nexus.get_details();
         let previous_cell = nexus_details.buffer_raw;
         Self::register(nexus_details.buffer_raw);
+        nexus.num_receivers.add(1, Ordering::Relaxed);
         Self {
             nexus,
             nexus_details,
@@ -52,6 +54,7 @@ impl<T> Clone for Receiver<T> {
         debug_assert!(self.current_event.is_none());
         unsafe {
             (*self.previous_cell).move_to();
+            self.nexus.num_receivers.add(1, Ordering::Relaxed);
         }
         Self {
             nexus: Arc::clone(&self.nexus),
@@ -59,6 +62,15 @@ impl<T> Clone for Receiver<T> {
             cursor: self.cursor,
             previous_cell: self.previous_cell,
             current_event: None,
+        }
+    }
+}
+
+impl<T> Drop for Receiver<T> {
+    fn drop(&mut self) {
+        self.nexus.num_receivers.sub(1, Ordering::Relaxed);
+        unsafe {
+            (*self.previous_cell).move_from();
         }
     }
 }
@@ -72,19 +84,42 @@ where
     /// error is returned.
     ///
     /// # Errors
-    /// - [`Error::Timeout`] The deadline was hit before a new value became available
-    pub fn try_recv_until(&mut self, deadline: Instant) -> Result<T, Error> {
+    /// - [`RecvError::Timeout`] The deadline was hit before a new value became available
+    ///
+    /// # Examples
+    /// ```
+    ///# use std::time::{Duration, Instant};
+    ///# use nexusq2::{make_channel, RecvError};
+    /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
+    /// let deadline = Instant::now() + Duration::from_millis(100);
+    /// assert_eq!(receiver.try_recv_until(deadline), Err(RecvError::Timeout));
+    /// ```
+    pub fn try_recv_until(&mut self, deadline: Instant) -> Result<T, RecvError> {
         unsafe {
             let current_cell = self.get_current_cell();
 
-            (*current_cell).wait_for_published_until(self.cursor, deadline)?;
+            if (*current_cell)
+                .wait_for_published_until(self.cursor, deadline)
+                .is_err()
+            {
+                return Err(RecvError::Timeout);
+            };
 
             Ok(self.do_read(current_cell))
         }
     }
 
-    /// Wait for the next value to become available and read it.
-    /// This function should never fail
+    /// Wait for the next value to become available and then read it. This method will block until
+    /// a new value is available.
+    ///
+    /// # Examples
+    /// ```
+    ///# use std::time::{Duration, Instant};
+    ///# use nexusq2::make_channel;
+    /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
+    /// sender.send(1).expect("send failed");
+    /// assert_eq!(receiver.recv(), 1);
+    /// ```
     pub fn recv(&mut self) -> T {
         unsafe {
             let current_cell = self.get_current_cell();
@@ -99,12 +134,23 @@ where
     /// error is returned
     ///
     /// # Errors
-    /// - [`Error::NoNewData`] There was no unread data in the channel
-    pub fn try_recv(&mut self) -> Result<T, Error> {
+    /// - [`RecvError::NoNewData`] There was no unread data in the channel
+    ///
+    /// # Examples
+    /// ```
+    ///# use nexusq2::make_channel;
+    ///# use nexusq2::RecvError;
+    /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
+    /// assert!(receiver.try_recv().is_err());
+    /// sender.send(1).expect("send failed");
+    /// assert_eq!(receiver.try_recv().expect("couldn't receive"), 1);
+    /// assert_eq!(receiver.try_recv(), Err(RecvError::NoNewData));
+    /// ```
+    pub fn try_recv(&mut self) -> Result<T, RecvError> {
         unsafe {
             let current_cell = self.get_current_cell();
             if (*current_cell).get_published() != self.cursor {
-                return Err(Error::NoNewData);
+                return Err(RecvError::NoNewData);
             }
             Ok(self.do_read(current_cell))
         }

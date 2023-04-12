@@ -86,7 +86,7 @@ fn sender_thread(
     sender: Sender<usize>,
 ) -> Sender<usize> {
     for i in 0..num {
-        sender.send(i);
+        sender.send(i).expect("couldn't send");
         apply_lag(sender_lag, average_jitter);
     }
     sender

@@ -108,7 +108,7 @@ mod latency_tests {
         let (sender, mut receiver) = make_channel(128).expect("couldn't construct channel");
         let num_sent = 500;
         for _ in 0..num_sent {
-            sender.send(Instant::now());
+            sender.send(Instant::now()).expect("couldn't send");
             total_duration += receiver.recv().elapsed();
         }
         println!("that took, {}", total_duration.as_nanos() / num_sent);
