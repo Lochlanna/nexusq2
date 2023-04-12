@@ -11,7 +11,7 @@ edition = "2021"
 event-listener = { git = "https://github.com/smol-rs/event-listener.git", features=["portable-atomic"]}
 thiserror = "1.0"
 portable-atomic = "1"
-futures = "0.3.26"
+futures = "0.3"
 parking_lot = "0.12"
 
 [dev-dependencies]

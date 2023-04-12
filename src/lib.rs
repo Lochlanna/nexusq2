@@ -1,3 +1,38 @@
+//! # nexusq
+//!
+//! A fast, lock-free multi-producer, mutli-consumer channel for Rust.
+//!
+//! This crate provides a multi-producer, mutli-consumer channel implementation that is both fast
+//! and lock-free. While there are no locks used to syncronsise data, writes are serialised through
+//! a shared token. Increasing the number of producers will most likley not result in higher overall
+//! throughput. Readers operate entirely in parallael without locks.
+//! 
+//! The way that producers and consumers wait for a cell to become available to read or write is through
+//! wait stratagies. This crate provides a couple and defaults to the use of the hybrid wait strategy.
+//! For most users the hybrid wait strategy will be fine providing a good balance between spinning and 
+//! blocking that will provide low latency where possible without burning CPU time thanks to thread parking.
+//! 
+//! Async will most likely exibit higher performance in situations where blocking is required thanks to the 
+//! cheap sleep/wake that async makes available. 
+//!
+//! ## Usage
+//!
+//! The channel is constructed using the [`make_channel`] function, which takes a buffer size as an
+//! argument. The buffer size must be at least 2, and no larger than [`isize::MAX`].
+//!
+//! The channel is then used by sending and receiving values using the [`Sender`] and [`Receiver`]
+//! types respectively.
+//! 
+//! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] API's repectivly giving them async compatability.
+//!
+//! ```
+//! let (sender, mut receiver) = nexusq::make_channel(4).expect("couldn't construct channel");
+//! sender.send(42).expect("couldn't send");
+//! sender.send(2).expect("couldn't send");
+//! assert_eq!(receiver.recv(), 42);
+//! assert_eq!(receiver.recv(), 2);
+//! ```
+
 #![warn(future_incompatible)]
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
