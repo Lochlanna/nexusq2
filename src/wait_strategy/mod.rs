@@ -145,6 +145,10 @@ pub trait Take<T: Takeable>: Debug + Notifiable {
     /// * `ptr`: A reference to an object that can be taken from
     /// * `deadline`: The time at which the wait will be aborted
     ///
+    /// # Errors
+    ///
+    /// - [`TakeError::Timeout`]: The wait timed out before the takeable container contained a value
+    ///
     /// # Examples
     ///
     /// ```

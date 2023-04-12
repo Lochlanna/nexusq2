@@ -1,5 +1,7 @@
+#[allow(clippy::wildcard_imports)]
 use super::*;
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct HybridWait {
     num_spin: u64,
@@ -14,7 +16,7 @@ impl Clone for HybridWait {
 }
 
 impl HybridWait {
-    /// Create a new HybridWait. HybridWait is a wait strategy that will spin for a number of times.
+    /// Create a new [`HybridWait`]. [`HybridWait`] is a wait strategy that will spin for a number of times.
     /// If the condition is not met it will yield the cpu for a number of times. If the condition is
     /// still not met it will wait on an event listener.
     ///
