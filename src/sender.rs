@@ -10,6 +10,8 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
+/// Errors that can be produced by the send methods on a `NexusQ` sender.
+/// All errors return the value that was intended to be sent so no data is lost.
 #[derive(Debug, ThisError, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
 pub enum SendError<T> {
     /// There are no free slots in the channel.
@@ -21,15 +23,7 @@ pub enum SendError<T> {
     /// There are no more receivers and therefore the channel is disconnected.
     /// Continued use will always return this error.
     #[error("there are no more receivers. The channel is disconnected")]
-    Disconnected(T),
-}
-
-#[derive(Debug, ThisError)]
-pub enum AsyncSendError {
-    /// There are no more receivers and therefore the channel is disconnected.
-    /// Continued use will always return this error.
-    #[error("there are no more receivers. The channel is disconnected")]
-    Disconnected,
+    Disconnected(Option<T>),
 }
 
 /// The pending state of an async send operation.
@@ -67,6 +61,9 @@ impl<T> Default for AsyncState<T> {
     }
 }
 
+/// A send handle for the `NexusQ` channel.
+/// This handle can be cloned and sent to other threads.
+/// Senders cannot close the channel and can be created from receiver handles!
 #[derive(Debug)]
 pub struct Sender<T> {
     nexus: Arc<NexusQ<T>>,
@@ -123,7 +120,7 @@ where
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
         unsafe {
             if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
-                return Err(SendError::Disconnected(value));
+                return Err(SendError::Disconnected(Some(value)));
             }
             let cell =
                 (*self.nexus_details.tail_wait_strategy).take_ptr(&(*self.nexus_details.tail));
@@ -166,7 +163,7 @@ where
     pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
         unsafe {
             if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
-                return Err(SendError::Disconnected(value));
+                return Err(SendError::Disconnected(Some(value)));
             }
             let cell = (*self.nexus_details.tail).swap(core::ptr::null_mut(), Ordering::Acquire);
 
@@ -219,7 +216,7 @@ where
     pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
         unsafe {
             if (*self.nexus_details.num_receivers).load(Ordering::Relaxed) == 0 {
-                return Err(SendError::Disconnected(value));
+                return Err(SendError::Disconnected(Some(value)));
             }
             if deadline < Instant::now() {
                 return Err(SendError::Timeout(value));
@@ -250,11 +247,11 @@ impl<T> Sink<T> for Sender<T>
 where
     T: Send,
 {
-    type Error = AsyncSendError;
+    type Error = SendError<T>;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Poll::Ready(Err(AsyncSendError::Disconnected));
+            return Poll::Ready(Err(SendError::Disconnected(None)));
         }
         let mut_self = Pin::get_mut(self);
         unsafe {

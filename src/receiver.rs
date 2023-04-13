@@ -9,6 +9,7 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
+/// An error that can occur when receiving data from a [`NexusQ`].
 #[derive(Debug, ThisError, PartialOrd, PartialEq, Ord, Eq, Clone, Copy)]
 pub enum RecvError {
     /// The operation timed out.
@@ -19,6 +20,10 @@ pub enum RecvError {
     NoNewData,
 }
 
+/// A receiver handle for a [`NexusQ`].
+/// This handle can be cloned and sent to other threads.
+/// Once all receivers have gone out of scope the [`NexusQ`] will be closed and is not recoverable.
+/// Send handles can be safely made from receiver handles.
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,

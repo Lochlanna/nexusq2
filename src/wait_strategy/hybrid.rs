@@ -1,3 +1,30 @@
+//! Hybrid wait strategy is a wait strategy that uses a combination of spinning, yielding,
+//! and blocking to wait for a condition to be met.
+//!
+//! It supports both sync and async waiting.
+//!
+//! The number of times the strategy spins and yields is configurable. It's implemented with sane defaults
+//! however if you're looking for the highest performance possible you should tweak the values to match what
+//! your use case requires. The default is 50 spins and 50 yields.
+//!
+//! Increasing the number of spins will provide the lowest possible latency and has the potential for
+//! very high throughput. However, it will consume a lot of CPU time and block other threads from making
+//! progress while it spins. In cases where you're running more threads than cores this could lead to
+//! starvation.
+//!
+//! Yields give up the CPU. This can be a good way to reduce CPU usage while still having
+//! relatively low latency. Yielding should be used with care however as yielding works differently
+//! on different systems. On linux yielding gives much better performance than on MacOS due to the way
+//! the scheduler works. On MacOS it's almost never worth yielding vs just blocking immediately. The
+//! default configuration does not use any yielding on any system and this is probably optimal for most use
+//! cases as yield is so unpredictable.
+//!
+//! Finally after spinning and yielding the strategy will block. Blocking is achieved via the [`event_listener`] crate.
+//! Blocking parks the thread until a notification is received. This is the most efficient way to wait consuming no CPU time
+//! and allowing other threads to take over the CPU.
+//!
+//! Configuring the wait strategy with 0 spins and 0 yields is allowed and will result in a wait strategy that only blocks.
+
 use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};
 use core::fmt::Debug;
 use event_listener::EventListener;

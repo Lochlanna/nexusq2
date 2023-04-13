@@ -1,3 +1,10 @@
+//! This module defines the traits which can be used to implement wait strategies.
+//! It also implements some of the base traits on types used by `NexusQ`
+//! `NexusQ` comes with multiple pre implemented wait strategies which will probably
+//! cover the requirements of most users however it's possible to implement your own
+//! using the traits defined in this module. Custom wait strategies could be useful to users
+//! developing for specialised systems.
+
 #[cfg(feature = "backoff")]
 pub mod backoff;
 pub mod hybrid;
@@ -11,6 +18,19 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
+/// Errors that can occur while waiting for some event to occur
+#[derive(Debug, ThisError)]
+pub enum WaitError {
+    /// Wait strategy timed out waiting for the condition.
+    #[error("wait strategy timed out waiting for the condition")]
+    Timeout,
+}
+
+/// This trait should be applied to a type that holds the current state of a pending
+/// event. This enables an event to be registered and a handle to that registration to be
+/// held in the form of the type that implements this trait. This allows us to poll that registration on
+/// the event at a later state.
+/// This is only used to implement async behaviour.
 pub trait AsyncEventGuard {
     /// Poll to see if the event has been triggered
     ///
@@ -20,7 +40,9 @@ pub trait AsyncEventGuard {
     fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
 }
 
+/// A type that can be waited on by checking if the value matches the expected value
 pub trait Waitable {
+    /// The type of the value that is compared against.
     type Inner;
 
     /// Check to see if self matches the expected value
@@ -41,7 +63,10 @@ pub trait Waitable {
     fn check(&self, expected: &Self::Inner) -> bool;
 }
 
+/// Takeable types are container types which hold an inner value which can be taken out of the container.
+/// An example of a takeable in an `Option<T>` where Option is the container and T is the inner value.
 pub trait Takeable {
+    /// The type that is taken from the container
     type Inner;
 
     /// Attempt to take the value from within self
@@ -60,6 +85,7 @@ pub trait Takeable {
     fn try_take(&self) -> Option<Self::Inner>;
 }
 
+/// A type that can be notified when an event occurs
 pub trait Notifiable {
     /// Notify all current listeners that an event has occurred
     fn notify_all(&self);
@@ -67,6 +93,7 @@ pub trait Notifiable {
     fn notify_one(&self);
 }
 
+/// A type which has the ability to wait for a value to be set on some waitable value
 pub trait Wait<W: Waitable>: Notifiable {
     /// Wait for the waitable to have the expected value.
     ///
@@ -155,6 +182,7 @@ pub trait Wait<W: Waitable>: Notifiable {
     ) -> Poll<()>;
 }
 
+/// A type which has the ability to wait for a value to be taken from some takeable value
 pub trait Take<T: Takeable>: Notifiable {
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block indefinitely.
@@ -250,10 +278,4 @@ impl AsyncEventGuard for EventListener {
     fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
         self.poll(cx)
     }
-}
-
-#[derive(Debug, ThisError)]
-pub enum WaitError {
-    #[error("wait strategy timed out waiting for the condition")]
-    Timeout,
 }

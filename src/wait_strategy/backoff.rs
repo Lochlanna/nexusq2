@@ -1,3 +1,12 @@
+//! This wait strategy uses the crossbeam-utils backoff strategy to wait for a condition to be met.
+//! The non-async methods will never block relying entirely on the backoff strategy. The backoff
+//! strategy will spin for a small number of times before yielding the thread. Refer to the
+//! [`crossbeam-utils::Backoff`] documentation for more details.
+//!
+//! When using this wait strategy asyncronously, the backoff strategy is not used and it defaults
+//! to immediately using a waker to put the task to sleep via the [`HybridWait`] strategy configured with
+//! zero spins and zero yields.
+
 use super::{
     hybrid::HybridWait, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
 };
@@ -11,6 +20,7 @@ use std::time::Instant;
 /// For async no backoff is applied and the waker is used to put the task to sleep if the condition is
 /// not met immediately.
 #[allow(clippy::module_name_repetitions)]
+#[derive(Debug)]
 pub struct BackoffWait {
     hybrid_wait: HybridWait,
 }

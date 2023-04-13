@@ -42,6 +42,8 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 #![deny(clippy::disallowed_types)]
+#![warn(missing_docs)]
+#![warn(missing_debug_implementations)]
 
 extern crate alloc;
 extern crate core;
@@ -60,9 +62,10 @@ use prelude::FastMod;
 use thiserror::Error as ThisError;
 
 pub use receiver::{Receiver, RecvError};
-pub use sender::{AsyncSendError, SendError, Sender};
+pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
+/// Errors produces by the core of a nexus channel.
 #[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
 pub enum NexusError {
     /// The buffer size cannot be smaller than 2
@@ -314,7 +317,7 @@ mod tests {
         sender.send(2).expect("couldn't send");
         assert_eq!(receiver.recv(), 1);
         drop(receiver);
-        assert_eq!(sender.send(1), Err(SendError::Disconnected(1)));
+        assert_eq!(sender.send(1), Err(SendError::Disconnected(Some(1))));
     }
 
     #[test]
