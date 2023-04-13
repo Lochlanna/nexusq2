@@ -109,7 +109,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use nexusq2::make_channel;
     /// let (sender, mut receiver) = make_channel(5).expect("Failed to make channel");
     /// sender.send(1).expect("Failed to send");
@@ -149,7 +149,7 @@ where
     /// to the send function is returned in the error.
     /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use nexusq2::{make_channel, SendError};
     /// let (mut sender, mut receiver) = make_channel(3).expect("couldn't construct channel");
     /// sender.try_send(1).expect("this should be fine");
@@ -201,7 +201,7 @@ where
     /// - [`SendError::Timeout`] The value couldn't be sent before the deadline.
     /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use std::time::{Duration, Instant};
     ///# use nexusq2::{make_channel, SendError};
     /// let (mut sender, mut receiver) = make_channel(3).expect("couldn't construct channel");

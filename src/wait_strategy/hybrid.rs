@@ -67,7 +67,7 @@ impl HybridWait {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use std::sync::Arc;
     ///# use std::thread;
     ///# use portable_atomic::AtomicUsize;

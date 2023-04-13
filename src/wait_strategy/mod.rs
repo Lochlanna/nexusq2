@@ -53,7 +53,7 @@ pub trait Waitable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use portable_atomic::AtomicUsize;
     ///# use nexusq2::wait_strategy::Waitable;
     /// let x = AtomicUsize::new(42);
@@ -73,7 +73,7 @@ pub trait Takeable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use portable_atomic::{AtomicPtr, AtomicUsize};
     ///# use nexusq2::wait_strategy::Takeable;
     /// let ptr = Box::into_raw(Box::new(42));
@@ -104,7 +104,7 @@ pub trait Wait<W: Waitable>: Notifiable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use std::sync::Arc;
     ///# use std::thread;
     ///# use portable_atomic::AtomicUsize;
@@ -139,7 +139,7 @@ pub trait Wait<W: Waitable>: Notifiable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use std::sync::Arc;
     ///# use std::thread;
     ///# use std::time::{Duration, Instant};
@@ -193,7 +193,7 @@ pub trait Take<T: Takeable>: Notifiable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
     ///# use portable_atomic::{AtomicPtr, Ordering};
     /// let wait = HybridWait::new(50, 50);
@@ -222,7 +222,7 @@ pub trait Take<T: Takeable>: Notifiable {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
     ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
     ///# use portable_atomic::{AtomicPtr, Ordering};
     /// let wait = HybridWait::new(50, 50);

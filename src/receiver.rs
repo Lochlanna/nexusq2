@@ -117,7 +117,7 @@ where
     /// a new value is available.
     ///
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use std::time::{Duration, Instant};
     ///# use nexusq2::make_channel;
     /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
@@ -146,7 +146,7 @@ where
     /// The number of values read.
     ///
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use std::time::{Duration, Instant};
     ///# use nexusq2::make_channel;
     /// let (mut sender, mut receiver) = make_channel::<usize>(10).expect("channel creation failed");
@@ -212,7 +212,7 @@ where
     /// - [`RecvError::Timeout`] The deadline was hit before a new value became available
     ///
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use std::time::{Duration, Instant};
     ///# use nexusq2::{make_channel, RecvError};
     /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
@@ -241,7 +241,7 @@ where
     /// - [`RecvError::NoNewData`] There was no unread data in the channel
     ///
     /// # Examples
-    /// ```
+    /// ```rust
     ///# use nexusq2::make_channel;
     ///# use nexusq2::RecvError;
     /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");

@@ -25,7 +25,7 @@
 //!
 //! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] APIs respectively giving them async compatability.
 //!
-//! ```
+//! ```rust
 //! let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
 //! sender.send(42).expect("couldn't send");
 //! sender.send(2).expect("couldn't send");
@@ -44,6 +44,7 @@
 #![deny(clippy::disallowed_types)]
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
+#![warn(rustdoc::broken_intra_doc_links)]
 
 extern crate alloc;
 extern crate core;
@@ -194,7 +195,7 @@ impl<T> NexusQ<T> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
 /// sender.send(42).expect("couldn't send");
 /// sender.send(2).expect("couldn't send");
@@ -219,7 +220,7 @@ pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), NexusErr
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// use nexusq2::wait_strategy::hybrid::HybridWait;
 /// let (sender, mut receiver) = nexusq2::make_channel_with(4, HybridWait::default(), HybridWait::default).expect("couldn't construct channel");
 /// sender.send(42).expect("couldn't send");
