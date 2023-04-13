@@ -11,7 +11,7 @@ use std::time::Instant;
 use thiserror::Error as ThisError;
 
 pub trait AsyncEventGuard: Debug {
-    fn poll_event_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
+    fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
 }
 
 pub trait Waitable {
@@ -207,7 +207,7 @@ impl<T> Takeable for AtomicPtr<T> {
 }
 
 impl AsyncEventGuard for EventListener {
-    fn poll_event_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+    fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
         self.poll(cx)
     }
 }

@@ -177,7 +177,7 @@ where
                 *event_listener = None;
                 return Poll::Ready(());
             }
-            let poll = listen_guard.as_mut().poll_event_ready(cx);
+            let poll = listen_guard.as_mut().poll_event(cx);
             match poll {
                 Poll::Ready(_) => {
                     if waitable.check(expected_value) {
@@ -285,7 +285,7 @@ where
                 *event_listener = None;
                 return Poll::Ready(ptr);
             }
-            let poll = listen_guard.as_mut().poll_event_ready(cx);
+            let poll = listen_guard.as_mut().poll_event(cx);
             match poll {
                 Poll::Ready(_) => {
                     if let Some(ptr) = ptr.try_take() {
