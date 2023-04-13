@@ -5,6 +5,12 @@ use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 use std::time::Instant;
 
+/// Hybrid wait can use some combination of spinning, yielding, and blocking to wait for a condition
+/// to be met.
+/// Blocking is achieved via the [`event_listener`] crate. Event listener will use std (in the form of a mutex) if enabled
+/// otherwise it falls back on a spinlock.
+///
+/// That means that [`HybridWait`] is usable in no-std environments.
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct HybridWait {

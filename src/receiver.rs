@@ -11,8 +11,10 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError, PartialOrd, PartialEq, Ord, Eq, Clone, Copy)]
 pub enum RecvError {
+    /// The operation timed out.
     #[error("timeout while waiting for next value to become available")]
     Timeout,
+    /// There is no unread data to be received
     #[error("there's no new data available to be read")]
     NoNewData,
 }
@@ -67,6 +69,12 @@ impl<T> Receiver<T> {
         unsafe {
             (*buffer).move_to();
         }
+    }
+
+    /// Returns a new Sender that can be used to send data to the channel this receiver is connected to.
+    #[must_use]
+    pub fn new_sender(&self) -> crate::Sender<T> {
+        crate::Sender::new(Arc::clone(&self.nexus))
     }
 }
 

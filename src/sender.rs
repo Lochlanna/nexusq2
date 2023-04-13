@@ -12,16 +12,22 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
 pub enum SendError<T> {
+    /// There are no free slots in the channel.
     #[error("channel is full")]
     Full(T),
+    /// Failed to send the value before the timeout.
     #[error("timeout while waiting for write slot to become available")]
     Timeout(T),
+    /// There are no more receivers and therefore the channel is disconnected.
+    /// Continued use will always return this error.
     #[error("there are no more receivers. The channel is disconnected")]
     Disconnected(T),
 }
 
 #[derive(Debug, ThisError)]
 pub enum AsyncSendError {
+    /// There are no more receivers and therefore the channel is disconnected.
+    /// Continued use will always return this error.
     #[error("there are no more receivers. The channel is disconnected")]
     Disconnected,
 }
@@ -101,10 +107,6 @@ where
 {
     /// Send a value to the channel. This function will block until the value is sent.
     ///
-    /// # Arguments
-    ///
-    /// * `value`: The value to be sent to the channel
-    ///
     /// # Errors
     /// - [`SendError::Disconnected`] There are no more receivers. The channel is disconnected
     ///
@@ -144,10 +146,6 @@ where
 
     /// Attempt to send a value to the channel immediately with no waiting. The given value is
     /// returned on failure
-    ///
-    /// # Arguments
-    ///
-    /// * `value`: The value to be sent to the channel
     ///
     /// # Errors
     /// - [`SendError::Full`] The channel is currently full and cannot accept a new value. The value given
@@ -201,12 +199,6 @@ where
     /// Note that there will be a slight amount of error involved with the deadline so don't rely
     /// on a high level of accuracy. If you need a high level of accuracy do some testing of this function
     /// first to see if it's accurate enough for your needs.
-    ///
-    /// # Arguments
-    ///
-    /// * `value`: The value to be sent to the channel
-    /// * `deadline`: The instant in time by which the value should be sent. Note there will be a small
-    /// amount of error involved with the deadline.
     ///
     /// # Errors
     /// - [`SendError::Timeout`] The value couldn't be sent before the deadline.

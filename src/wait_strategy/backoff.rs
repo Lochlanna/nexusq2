@@ -6,6 +6,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
+/// Backoff wait uses incremental backoff to wait for a condition to be met.
+/// This is achieved via the [`crossbeam-utils::Backoff`] type from the `crossbeam-utils` crate.
+/// For async no backoff is applied and the waker is used to put the task to sleep if the condition is
+/// not met immediately.
 #[allow(clippy::module_name_repetitions)]
 pub struct BackoffWait {
     hybrid_wait: HybridWait,

@@ -12,21 +12,58 @@ use std::time::Instant;
 use thiserror::Error as ThisError;
 
 pub trait AsyncEventGuard {
+    /// Poll to see if the event has been triggered
+    ///
+    /// # Arguments
+    ///
+    /// * `cx`: The async context. This is used to register the waker to be woken when the event is triggered
     fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
 }
 
 pub trait Waitable {
     type Inner;
+
+    /// Check to see if self matches the expected value
+    ///
+    /// # Arguments
+    ///
+    /// * `expected`: The expected value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use portable_atomic::AtomicUsize;
+    ///# use nexusq2::wait_strategy::Waitable;
+    /// let x = AtomicUsize::new(42);
+    /// assert!(x.check(&42));
+    /// assert!(!x.check(&21));
+    /// ```
     fn check(&self, expected: &Self::Inner) -> bool;
 }
 
 pub trait Takeable {
     type Inner;
+
+    /// Attempt to take the value from within self
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///# use portable_atomic::{AtomicPtr, AtomicUsize};
+    ///# use nexusq2::wait_strategy::Takeable;
+    /// let ptr = Box::into_raw(Box::new(42));
+    /// let x = AtomicPtr::new(ptr);
+    /// assert_eq!(x.try_take().unwrap(), ptr);
+    /// assert!(x.try_take().is_none());
+    ///# unsafe { Box::from_raw(ptr) };
+    /// ```
     fn try_take(&self) -> Option<Self::Inner>;
 }
 
 pub trait Notifiable {
+    /// Notify all current listeners that an event has occurred
     fn notify_all(&self);
+    /// Notify a single listener that an event has occurred
     fn notify_one(&self);
 }
 
@@ -153,7 +190,7 @@ pub trait Take<T: Takeable>: Notifiable {
     ///
     /// # Errors
     ///
-    /// - [`TakeError::Timeout`]: The wait timed out before the takeable container contained a value
+    /// - [`WaitError::Timeout`]: The wait timed out before the takeable container contained a value
     ///
     /// # Examples
     ///

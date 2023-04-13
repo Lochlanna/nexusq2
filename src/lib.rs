@@ -1,18 +1,18 @@
 //! # nexusq
 //!
-//! A fast, lock-free multi-producer, mutli-consumer channel for Rust.
+//! A fast, lock-free multi-producer, multi-consumer channel for Rust.
 //!
-//! This crate provides a multi-producer, mutli-consumer channel implementation that is both fast
-//! and lock-free. While there are no locks used to syncronsise data, writes are serialised through
-//! a shared token. Increasing the number of producers will most likley not result in higher overall
-//! throughput. Readers operate entirely in parallael without locks.
+//! This crate provides a multi-producer, multi-consumer channel implementation that is both fast
+//! and lock-free. While there are no locks used to synchronise data, writes are serialised through
+//! a shared token. Increasing the number of producers will most likely not result in higher overall
+//! throughput. Readers operate entirely in parallel without locks.
 //!
 //! The way that producers and consumers wait for a cell to become available to read or write is through
-//! wait stratagies. This crate provides a couple and defaults to the use of the hybrid wait strategy.
+//! wait strategies. This crate provides a couple and defaults to the use of the hybrid wait strategy.
 //! For most users the hybrid wait strategy will be fine providing a good balance between spinning and
 //! blocking that will provide low latency where possible without burning CPU time thanks to thread parking.
 //!
-//! Async will most likely exibit higher performance in situations where blocking is required thanks to the
+//! Async will most likely exhibit higher performance in situations where blocking is required thanks to the
 //! cheap sleep/wake that async makes available.
 //!
 //! ## Usage
@@ -23,7 +23,7 @@
 //! The channel is then used by sending and receiving values using the [`Sender`] and [`Receiver`]
 //! types respectively.
 //!
-//! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] API's repectivly giving them async compatability.
+//! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] APIs respectively giving them async compatability.
 //!
 //! ```
 //! let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
@@ -60,13 +60,15 @@ use prelude::FastMod;
 use thiserror::Error as ThisError;
 
 pub use receiver::{Receiver, RecvError};
-pub use sender::{SendError, Sender};
+pub use sender::{AsyncSendError, SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
 #[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
 pub enum NexusError {
+    /// The buffer size cannot be smaller than 2
     #[error("nexusq channel buffers must be at least 2 elements")]
     BufferTooSmall,
+    /// The buffer size cannot be larger than [`isize::MAX`]
     #[error("nexusq channel buffers cannot be larger than isize::MAX")]
     BufferTooLarge,
 }
