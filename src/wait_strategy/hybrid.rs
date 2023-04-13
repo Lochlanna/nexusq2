@@ -70,7 +70,7 @@ impl HybridWait {
     /// ```rust
     ///# use std::sync::Arc;
     ///# use std::thread;
-    ///# use portable_atomic::AtomicUsize;
+    ///# use portable_atomic::{AtomicUsize, Ordering};
     ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Wait, Waitable, Notifiable};
     /// let wait = HybridWait::new(50, 50);
     /// let x = AtomicUsize::new(0);
@@ -84,8 +84,9 @@ impl HybridWait {
     ///     //check that the thread is not finished
     ///     assert!(!handle.is_finished());
     ///     //set x to 1
-    ///     x.store(1, std::sync::atomic::Ordering::Release);
+    ///     x.store(1, Ordering::Release);
     ///     //notify the wait strategy
+    ///     portable_atomic::fence(Ordering::Acquire);
     ///     wait.notify_all();
     ///     //check that the thread is finished
     ///     thread::sleep(std::time::Duration::from_millis(10));
