@@ -153,7 +153,9 @@ where
     /// let expected = vec![16, 32, 64, 128];
     /// assert_eq!(receiver.try_recv_batch(4, &mut res), 4);
     /// assert_eq!(res, expected);
-    /// assert!(receiver.try_recv().is_err());
+    ///# assert!(receiver.try_recv().is_err());
+    ///# sender.send(256).expect("send failed");
+    ///# assert_eq!(receiver.try_recv().expect("recv failed"), 256);
     /// ```
     pub fn try_recv_batch(&mut self, mut max_results: usize, buffer: &mut Vec<T>) -> usize {
         max_results = max_results.clamp(0, self.nexus_details.buffer_length - 1);

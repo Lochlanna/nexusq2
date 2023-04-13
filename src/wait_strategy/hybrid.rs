@@ -2,6 +2,7 @@ use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitab
 use core::fmt::Debug;
 use event_listener::EventListener;
 use std::pin::{pin, Pin};
+use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -52,7 +53,7 @@ impl HybridWait {
     ///         wait.wait_for(&x, &1);
     ///     });
     ///     //wait for the thread to start
-    ///     thread::sleep(std::time::Duration::from_millis(50));
+    ///     thread::sleep(std::time::Duration::from_millis(10));
     ///     //check that the thread is not finished
     ///     assert!(!handle.is_finished());
     ///     //set x to 1
@@ -82,10 +83,11 @@ impl Default for HybridWait {
 
 impl Notifiable for HybridWait {
     fn notify_all(&self) {
-        self.event.notify(usize::MAX);
+        portable_atomic::fence(Ordering::Acquire);
+        self.event.notify_relaxed(usize::MAX);
     }
     fn notify_one(&self) {
-        self.event.notify(1);
+        self.event.notify_relaxed(1);
     }
 }
 

@@ -120,8 +120,11 @@ impl<T> Cell<T> {
 impl<T> Cell<T> {
     pub fn move_from(&self) {
         let old = self.counter.fetch_sub(1, Ordering::Release);
-        assert!(old >= 1);
-        self.wait_strategy.notify_all();
+        debug_assert!(old >= 1);
+        if old == 1 {
+            // only wake if there are no more readers on the cell
+            self.wait_strategy.notify_all();
+        }
     }
 
     pub fn move_to(&self) {

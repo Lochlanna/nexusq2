@@ -6,7 +6,8 @@ use std::fmt::{Display, Formatter};
 use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
 
-use nexusq2::make_channel;
+use nexusq2::make_channel_with;
+use nexusq2::wait_strategy::hybrid::HybridWait;
 use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
 
@@ -38,7 +39,10 @@ fn nexus(
 ) -> Duration {
     let size = 100_u64.next_power_of_two();
     let (sender, receiver) =
-        make_channel(size.try_into().unwrap()).expect("couldn't construct channel");
+        make_channel_with(size.try_into().unwrap(), HybridWait::new(1000, 0), || {
+            HybridWait::new(1000, 0)
+        })
+        .expect("couldn't construct channel");
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
 }
@@ -55,7 +59,7 @@ fn multiq2(
     let size = 100_u64.next_power_of_two();
     let (sender, receiver) = multiqueue2::broadcast_queue_with(
         size,
-        multiqueue2::wait::BlockingWait::with_spins(100_000, 0),
+        multiqueue2::wait::BlockingWait::with_spins(1000, 10),
     );
 
     run_test(iterations, writers, readers, pool, tx, rx, sender, receiver)
