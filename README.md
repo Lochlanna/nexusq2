@@ -1,5 +1,5 @@
 # NexusQ
-*A fast buffered multi-producer, multi-consumer queue written in rust*
+*A fast bounded multi-producer, multi-consumer queue written in rust*
 
 ### Why use it?
 
