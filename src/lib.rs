@@ -71,7 +71,6 @@ pub enum NexusError {
     BufferTooLarge,
 }
 
-#[derive(Debug)]
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
     tail: *const AtomicPtr<cell::Cell<T>>,
@@ -79,6 +78,19 @@ struct NexusDetails<T> {
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
     num_receivers: *const AtomicUsize,
+}
+
+impl<T> Debug for NexusDetails<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        //write all members of cell except for tail_wait_strategy
+        f.debug_struct("NexusDetails")
+            .field("claimed", &self.claimed)
+            .field("tail", &self.tail)
+            .field("buffer_raw", &self.buffer_raw)
+            .field("buffer_length", &self.buffer_length)
+            .field("num_receivers", &self.num_receivers)
+            .finish()
+    }
 }
 
 impl<T> Copy for NexusDetails<T> {}

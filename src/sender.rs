@@ -1,8 +1,8 @@
 use crate::prelude::FastMod;
 use crate::wait_strategy::AsyncEventGuard;
-use crate::{NexusQ, cell, NexusDetails};
+use crate::{cell, NexusDetails, NexusQ};
 use alloc::sync::Arc;
-use core::fmt::Debug;
+use core::fmt::{Debug, Formatter};
 use futures::Sink;
 use portable_atomic::Ordering;
 use std::pin::Pin;
@@ -27,11 +27,28 @@ pub enum AsyncSendError {
 }
 
 /// The pending state of an async send operation.
-#[derive(Debug)]
 struct AsyncState<T> {
     current_cell: *mut cell::Cell<T>,
     claimed: usize,
     async_state: Option<Pin<Box<dyn AsyncEventGuard>>>,
+}
+
+impl<T> Debug for AsyncState<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        //write all members of AsyncState. For async_state write "Some" or "None" but not the value of Some (as the value is not Debug)
+        f.debug_struct("AsyncState")
+            .field("current_cell", &self.current_cell)
+            .field("claimed", &self.claimed)
+            .field(
+                "async_state",
+                if self.async_state.is_some() {
+                    &"Some"
+                } else {
+                    &"None"
+                },
+            )
+            .finish()
+    }
 }
 
 impl<T> Default for AsyncState<T> {

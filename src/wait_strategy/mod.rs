@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
-pub trait AsyncEventGuard: Debug {
+pub trait AsyncEventGuard {
     fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
 }
 

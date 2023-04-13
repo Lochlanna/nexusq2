@@ -2,7 +2,7 @@ use crate::prelude::FastMod;
 use crate::wait_strategy::AsyncEventGuard;
 use crate::{cell::Cell, NexusDetails, NexusQ};
 use alloc::sync::Arc;
-use core::fmt::Debug;
+use core::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
@@ -17,7 +17,6 @@ pub enum RecvError {
     NoNewData,
 }
 
-#[derive(Debug)]
 pub struct Receiver<T> {
     nexus: Arc<NexusQ<T>>,
     nexus_details: NexusDetails<T>,
@@ -25,6 +24,26 @@ pub struct Receiver<T> {
     previous_cell: *const Cell<T>,
     // this is only used for async!
     current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
+}
+
+impl<T> Debug for Receiver<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        // write all members of receiver. For current event write Some or None but not the value of Some (as the value is not Debug)
+        f.debug_struct("Receiver")
+            .field("nexus", &self.nexus)
+            .field("nexus_details", &self.nexus_details)
+            .field("cursor", &self.cursor)
+            .field("previous_cell", &self.previous_cell)
+            .field(
+                "current_event",
+                if self.current_event.is_some() {
+                    &"Some"
+                } else {
+                    &"None"
+                },
+            )
+            .finish()
+    }
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
