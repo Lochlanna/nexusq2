@@ -138,6 +138,7 @@ pub trait Take<T: Takeable>: Notifiable {
     /// // put the pointer back in the takeable container
     /// t.store(ptr, Ordering::Release);
     /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
+    ///# unsafe{Box::from_raw(ptr);}
     /// ```
     fn take_ptr(&self, ptr: &T) -> T::Inner;
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
@@ -155,8 +156,8 @@ pub trait Take<T: Takeable>: Notifiable {
     /// # Examples
     ///
     /// ```
-    /// # use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
-    /// # use portable_atomic::{AtomicPtr, Ordering};
+    ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
+    ///# use portable_atomic::{AtomicPtr, Ordering};
     /// let wait = HybridWait::new(50, 50);
     /// let t = AtomicPtr::new(Box::into_raw(Box::new(1)));
     /// let ptr = wait.take_ptr(&t);
@@ -166,6 +167,7 @@ pub trait Take<T: Takeable>: Notifiable {
     /// // put the pointer back in the takeable container
     /// t.store(ptr, Ordering::Release);
     /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
+    ///# unsafe{Box::from_raw(ptr);}
     /// ```
     fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
 

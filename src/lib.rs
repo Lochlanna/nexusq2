@@ -163,7 +163,7 @@ impl<T> NexusQ<T> {
         }
     }
 
-    pub(crate) fn get_details(&self) -> NexusDetails<T> {
+    pub fn get_details(&self) -> NexusDetails<T> {
         NexusDetails {
             claimed: &self.claimed,
             tail: &self.tail,

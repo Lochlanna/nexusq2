@@ -100,6 +100,27 @@ impl<T> Receiver<T>
 where
     T: Clone,
 {
+    /// Wait for the next value to become available and then read it. This method will block until
+    /// a new value is available.
+    ///
+    /// # Examples
+    /// ```
+    ///# use std::time::{Duration, Instant};
+    ///# use nexusq2::make_channel;
+    /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
+    /// sender.send(1).expect("send failed");
+    /// assert_eq!(receiver.recv(), 1);
+    /// ```
+    pub fn recv(&mut self) -> T {
+        unsafe {
+            let current_cell = self.get_current_cell();
+
+            (*current_cell).wait_for_published(self.cursor);
+
+            self.do_read(current_cell)
+        }
+    }
+
     /// Wait for the next value to become available for up to the deadline time.
     /// If the next value is available before the deadline it's read otherwise an
     /// error is returned.
@@ -130,27 +151,6 @@ where
         }
     }
 
-    /// Wait for the next value to become available and then read it. This method will block until
-    /// a new value is available.
-    ///
-    /// # Examples
-    /// ```
-    ///# use std::time::{Duration, Instant};
-    ///# use nexusq2::make_channel;
-    /// let (mut sender, mut receiver) = make_channel::<usize>(3).expect("channel creation failed");
-    /// sender.send(1).expect("send failed");
-    /// assert_eq!(receiver.recv(), 1);
-    /// ```
-    pub fn recv(&mut self) -> T {
-        unsafe {
-            let current_cell = self.get_current_cell();
-
-            (*current_cell).wait_for_published(self.cursor);
-
-            self.do_read(current_cell)
-        }
-    }
-
     /// Attempts to immediately read the next value. If a new value is not available immediately an
     /// error is returned
     ///
@@ -176,12 +176,7 @@ where
             Ok(self.do_read(current_cell))
         }
     }
-}
 
-impl<T> Receiver<T>
-where
-    T: Clone,
-{
     unsafe fn do_read(&mut self, current_cell: *const Cell<T>) -> T {
         (*current_cell).move_to();
         (*self.previous_cell).move_from();
