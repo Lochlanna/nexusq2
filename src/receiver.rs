@@ -129,6 +129,74 @@ where
         }
     }
 
+    /// Attempt to read up to `max_results` values from the channel. If there are less than `max_results` values available
+    /// then only the available values will be returned. If there are no values available then an empty vector will be returned.
+    /// This method will not block. This should be somewhat faster than reading values one at a time.
+    ///
+    /// # Arguments
+    /// * `max_results` - The maximum number of values to read. If there are less than `max_results` values available then only the available values will be returned.
+    /// * `buffer` - A vector to store the read values in. This vector doesn't need to be empty. The read values will be appended to the end of the vector.
+    ///
+    /// # Returns
+    /// The number of values read.
+    ///
+    /// # Examples
+    /// ```
+    ///# use std::time::{Duration, Instant};
+    ///# use nexusq2::make_channel;
+    /// let (mut sender, mut receiver) = make_channel::<usize>(10).expect("channel creation failed");
+    /// sender.send(16).expect("send failed");
+    /// sender.send(32).expect("send failed");
+    /// sender.send(64).expect("send failed");
+    /// sender.send(128).expect("send failed");
+    /// let mut res = Vec::new();
+    /// let expected = vec![16, 32, 64, 128];
+    /// assert_eq!(receiver.try_recv_batch(4, &mut res), 4);
+    /// assert_eq!(res, expected);
+    /// assert!(receiver.try_recv().is_err());
+    /// ```
+    pub fn try_recv_batch(&mut self, mut max_results: usize, buffer: &mut Vec<T>) -> usize {
+        max_results = max_results.clamp(0, self.nexus_details.buffer_length - 1);
+        if max_results == 0 {
+            return 0;
+        }
+        unsafe {
+            let mut current_claimed = (*self.nexus_details.claimed).load(Ordering::Acquire);
+            let current_claimed_index = current_claimed.fast_mod(self.nexus_details.buffer_length);
+            let current_claimed_cell = self.nexus_details.buffer_raw.add(current_claimed_index);
+            if (*current_claimed_cell).get_published() < current_claimed {
+                // This means that the current claimed cell has not been published yet.
+                current_claimed -= 1;
+            }
+            if current_claimed <= self.cursor {
+                return 0;
+            }
+            let num_available = current_claimed - self.cursor;
+            debug_assert!(num_available > 0);
+
+            let num_to_read = num_available.min(max_results);
+
+            buffer.reserve(num_to_read);
+
+            let mut cell = core::ptr::null();
+            for i in 0..num_to_read {
+                let cell_index = (self.cursor + i).fast_mod(self.nexus_details.buffer_length);
+                cell = self.nexus_details.buffer_raw.add(cell_index);
+                debug_assert_eq!((*cell).get_published(), self.cursor + i);
+                buffer.push((*cell).read());
+            }
+
+            self.cursor += num_to_read;
+            if !cell.is_null() {
+                (*cell).move_to();
+                (*self.previous_cell).move_from();
+                self.previous_cell = cell;
+            }
+
+            num_to_read
+        }
+    }
+
     /// Wait for the next value to become available for up to the deadline time.
     /// If the next value is available before the deadline it's read otherwise an
     /// error is returned.
