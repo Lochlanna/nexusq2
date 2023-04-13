@@ -1,6 +1,5 @@
 pub mod hybrid;
 
-use crate::FastMod;
 use core::fmt::Debug;
 use event_listener::EventListener;
 use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
@@ -15,12 +14,12 @@ pub trait AsyncEventGuard: Debug {
 }
 
 pub trait Waitable {
-    type Inner: Copy + Debug;
-    fn check(&self, expected: Self::Inner) -> bool;
+    type Inner;
+    fn check(&self, expected: &Self::Inner) -> bool;
 }
 
 pub trait Takeable {
-    type Inner: Copy;
+    type Inner;
     fn try_take(&self) -> Option<Self::Inner>;
 }
 
@@ -29,7 +28,7 @@ pub trait Notifiable {
     fn notify_one(&self);
 }
 
-pub trait Wait<W: Waitable>: Debug + Notifiable {
+pub trait Wait<W: Waitable>: Notifiable {
     /// Wait for the waitable to have the expected value.
     ///
     /// # Arguments
@@ -49,7 +48,7 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     /// //spawn a scoped thread that waits for x to be 1 using wait
     /// thread::scope(|s| {
     ///     let handle = s.spawn(||{
-    ///         wait.wait_for(&x, 1);
+    ///         wait.wait_for(&x, &1);
     ///     });
     ///     //wait for the thread to start
     ///     thread::sleep(std::time::Duration::from_millis(50));
@@ -59,7 +58,7 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     ///     handle.join().expect("couldn't join thread!")
     /// });
     /// ```
-    fn wait_for(&self, waitable: &W, expected_value: W::Inner);
+    fn wait_for(&self, waitable: &W, expected_value: &W::Inner);
     /// Wait for the waitable to have the expected value or until the deadline is reached.
     ///
     /// # Arguments
@@ -85,7 +84,7 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     /// //spawn a scoped thread that waits for x to be 1 using wait
     /// thread::scope(|s| {
     ///     let handle = s.spawn(||{
-    ///         assert!(wait.wait_until(&x, 1, Instant::now() + Duration::from_millis(10)).is_err());
+    ///         assert!(wait.wait_until(&x, &1, Instant::now() + Duration::from_millis(10)).is_err());
     ///     });
     ///     //wait for the thread to start
     ///     thread::sleep(Duration::from_millis(50));
@@ -95,7 +94,7 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
     fn wait_until(
         &self,
         waitable: &W,
-        expected_value: W::Inner,
+        expected_value: &W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError>;
 
@@ -112,12 +111,12 @@ pub trait Wait<W: Waitable>: Debug + Notifiable {
         &self,
         cx: &mut Context<'_>,
         waitable: &W,
-        expected_value: W::Inner,
+        expected_value: &W::Inner,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()>;
 }
 
-pub trait Take<T: Takeable>: Debug + Notifiable {
+pub trait Take<T: Takeable>: Notifiable {
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block indefinitely.
     ///
@@ -189,8 +188,8 @@ pub trait Take<T: Takeable>: Debug + Notifiable {
 impl Waitable for AtomicUsize {
     type Inner = usize;
 
-    fn check(&self, expected: Self::Inner) -> bool {
-        self.load(Ordering::Acquire) == expected
+    fn check(&self, expected: &Self::Inner) -> bool {
+        self.load(Ordering::Acquire).eq(expected)
     }
 }
 

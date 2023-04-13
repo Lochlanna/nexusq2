@@ -47,52 +47,24 @@ extern crate alloc;
 extern crate core;
 
 mod cell;
+pub(crate) mod prelude;
 mod receiver;
 mod sender;
 pub mod wait_strategy;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use portable_atomic::{AtomicPtr, AtomicUsize};
+use prelude::FastMod;
 use thiserror::Error as ThisError;
 
 pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
-pub(crate) trait FastMod {
-    #[must_use]
-    fn fast_mod(&self, denominator: Self) -> Self;
-    #[must_use]
-    fn maybe_next_power_of_two(&self) -> Self;
-}
-
-impl FastMod for usize {
-    fn fast_mod(&self, denominator: Self) -> Self {
-        debug_assert!(denominator > 0);
-        debug_assert!(denominator.is_power_of_two());
-        *self & (denominator - 1)
-    }
-
-    fn maybe_next_power_of_two(&self) -> Self {
-        self.next_power_of_two()
-    }
-}
-
-impl FastMod for u64 {
-    fn fast_mod(&self, denominator: Self) -> Self {
-        debug_assert!(denominator > 0);
-        debug_assert!(denominator.is_power_of_two());
-        *self & (denominator - 1)
-    }
-
-    fn maybe_next_power_of_two(&self) -> Self {
-        self.next_power_of_two()
-    }
-}
-
 #[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
-pub enum BufferError {
+pub enum NexusError {
     #[error("nexusq channel buffers must be at least 2 elements")]
     BufferTooSmall,
     #[error("nexusq channel buffers cannot be larger than isize::MAX")]
@@ -117,7 +89,6 @@ impl<T> Clone for NexusDetails<T> {
     }
 }
 
-#[derive(Debug)]
 struct NexusQ<T> {
     buffer: Vec<cell::Cell<T>>,
     buffer_raw: *mut cell::Cell<T>,
@@ -127,8 +98,21 @@ struct NexusQ<T> {
     num_receivers: AtomicUsize,
 }
 
+impl<T> Debug for NexusQ<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        //write all members of nexusq except for the tail_wait_strategy
+        f.debug_struct("NexusQ")
+            .field("buffer", &self.buffer)
+            .field("buffer_raw", &self.buffer_raw)
+            .field("claimed", &self.claimed)
+            .field("tail", &self.tail)
+            .field("num_receivers", &self.num_receivers)
+            .finish()
+    }
+}
+
 impl<T> NexusQ<T> {
-    fn new(size: usize) -> Result<Self, BufferError> {
+    fn new(size: usize) -> Result<Self, NexusError> {
         Self::with_strategies(size, HybridWait::default(), HybridWait::default)
     }
 
@@ -136,17 +120,17 @@ impl<T> NexusQ<T> {
         size: usize,
         writer_ws: W,
         reader_ws: impl Fn() -> R,
-    ) -> Result<Self, BufferError>
+    ) -> Result<Self, NexusError>
     where
         W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
         R: Wait<AtomicUsize> + 'static + Clone,
     {
         if size < 2 {
-            return Err(BufferError::BufferTooSmall);
+            return Err(NexusError::BufferTooSmall);
         }
         if size > isize::MAX as usize {
             // max size for vector!
-            return Err(BufferError::BufferTooLarge);
+            return Err(NexusError::BufferTooLarge);
         }
 
         let size = size.maybe_next_power_of_two();
@@ -188,8 +172,8 @@ impl<T> NexusQ<T> {
 /// * `size`: The size of the channel buffer. This must be at least 2, and no larger than [`isize::MAX`]
 ///
 /// # Errors
-/// - [`BufferError::BufferTooSmall`] if the buffer size is less than 2
-/// - [`BufferError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
+/// - [`NexusError::BufferTooSmall`] if the buffer size is less than 2
+/// - [`NexusError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
 ///
 /// # Examples
 ///
@@ -200,7 +184,7 @@ impl<T> NexusQ<T> {
 /// assert_eq!(receiver.recv(), 42);
 /// assert_eq!(receiver.recv(), 2);
 /// ```
-pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferError> {
+pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), NexusError> {
     make_channel_with(size, HybridWait::default(), HybridWait::default)
 }
 
@@ -213,8 +197,8 @@ pub fn make_channel<T>(size: usize) -> Result<(Sender<T>, Receiver<T>), BufferEr
 /// * `reader_ws`: A function that produces wait strategies which are used to wait on the readers
 ///
 /// # Errors
-/// - [`BufferError::BufferTooSmall`] if the buffer size is less than 2
-/// - [`BufferError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
+/// - [`NexusError::BufferTooSmall`] if the buffer size is less than 2
+/// - [`NexusError::BufferTooLarge`] if the buffer size is larger than [`isize::MAX`]
 ///
 /// # Examples
 ///
@@ -228,7 +212,7 @@ pub fn make_channel_with<T, W, R>(
     size: usize,
     writer_ws: W,
     reader_ws: impl Fn() -> R,
-) -> Result<(Sender<T>, Receiver<T>), BufferError>
+) -> Result<(Sender<T>, Receiver<T>), NexusError>
 where
     W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
     R: Wait<AtomicUsize> + 'static + Clone,
@@ -323,11 +307,11 @@ mod tests {
     fn buffer_min_size() {
         assert_eq!(
             make_channel::<()>(0).unwrap_err(),
-            BufferError::BufferTooSmall
+            NexusError::BufferTooSmall
         );
         assert_eq!(
             make_channel::<()>(1).unwrap_err(),
-            BufferError::BufferTooSmall
+            NexusError::BufferTooSmall
         );
         assert!(make_channel::<()>(2).is_ok());
     }
@@ -336,7 +320,7 @@ mod tests {
     fn buffer_too_big() {
         assert_eq!(
             make_channel::<()>(isize::MAX as usize + 1).unwrap_err(),
-            BufferError::BufferTooLarge
+            NexusError::BufferTooLarge
         );
         //Don't actually test a valid but extremely large buffer as that would kill ram for tests...
     }

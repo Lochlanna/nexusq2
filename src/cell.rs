@@ -1,17 +1,27 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
-use core::fmt::Debug;
+use core::fmt::{Debug, Formatter};
 use portable_atomic::{AtomicUsize, Ordering};
 use std::cell::UnsafeCell;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
-#[derive(Debug)]
 pub struct Cell<T> {
     value: UnsafeCell<Option<T>>,
     counter: AtomicUsize,
     current_id: AtomicUsize,
     wait_strategy: Box<dyn Wait<AtomicUsize>>,
+}
+
+impl<T> Debug for Cell<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        // write all members of cell excluding wait_strategy
+        f.debug_struct("Cell")
+            .field("value", &self.value)
+            .field("counter", &self.counter)
+            .field("current_id", &self.current_id)
+            .finish()
+    }
 }
 
 impl<T> Default for Cell<T> {
@@ -33,14 +43,14 @@ impl<T> Cell<T> {
     }
 
     pub fn wait_for_write_safe(&self) {
-        self.wait_strategy.wait_for(&self.counter, 0);
+        self.wait_strategy.wait_for(&self.counter, &0);
     }
     pub fn wait_for_write_safe_with_timeout(&self, timeout: Duration) -> Result<(), WaitError> {
         self.wait_strategy
-            .wait_until(&self.counter, 0, Instant::now() + timeout)
+            .wait_until(&self.counter, &0, Instant::now() + timeout)
     }
     pub fn wait_for_write_safe_before(&self, deadline: Instant) -> Result<(), WaitError> {
-        self.wait_strategy.wait_until(&self.counter, 0, deadline)
+        self.wait_strategy.wait_until(&self.counter, &0, deadline)
     }
 
     pub fn poll_write_safe(
@@ -49,12 +59,12 @@ impl<T> Cell<T> {
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         self.wait_strategy
-            .poll(cx, &self.counter, 0, event_listener)
+            .poll(cx, &self.counter, &0, event_listener)
     }
 
     pub fn wait_for_published(&self, expected_published_id: usize) {
         self.wait_strategy
-            .wait_for(&self.current_id, expected_published_id);
+            .wait_for(&self.current_id, &expected_published_id);
     }
 
     pub fn poll_published(
@@ -64,7 +74,7 @@ impl<T> Cell<T> {
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         self.wait_strategy
-            .poll(cx, &self.current_id, expected_published_id, event_listener)
+            .poll(cx, &self.current_id, &expected_published_id, event_listener)
     }
     pub fn wait_for_published_until(
         &self,
@@ -72,7 +82,7 @@ impl<T> Cell<T> {
         deadline: Instant,
     ) -> Result<(), WaitError> {
         self.wait_strategy
-            .wait_until(&self.current_id, expected_published_id, deadline)
+            .wait_until(&self.current_id, &expected_published_id, deadline)
     }
     pub fn wait_for_published_with_timeout(
         &self,
@@ -81,7 +91,7 @@ impl<T> Cell<T> {
     ) -> Result<(), WaitError> {
         self.wait_strategy.wait_until(
             &self.current_id,
-            expected_published_id,
+            &expected_published_id,
             Instant::now() + timeout,
         )
     }

@@ -1,6 +1,6 @@
+use crate::prelude::FastMod;
 use crate::wait_strategy::AsyncEventGuard;
-use crate::{cell, NexusDetails};
-use crate::{FastMod, NexusQ};
+use crate::{NexusQ, cell, NexusDetails};
 use alloc::sync::Arc;
 use core::fmt::Debug;
 use futures::Sink;
@@ -31,7 +31,7 @@ pub enum AsyncSendError {
 struct AsyncState<T> {
     current_cell: *mut cell::Cell<T>,
     claimed: usize,
-    current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
+    async_state: Option<Pin<Box<dyn AsyncEventGuard>>>,
 }
 
 impl<T> Default for AsyncState<T> {
@@ -39,7 +39,7 @@ impl<T> Default for AsyncState<T> {
         Self {
             current_cell: core::ptr::null_mut(),
             claimed: 0,
-            current_event: None,
+            async_state: None,
         }
     }
 }
@@ -68,7 +68,7 @@ impl<T> Sender<T> {
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
-        debug_assert!(self.async_state.current_event.is_none());
+        debug_assert!(self.async_state.async_state.is_none());
         debug_assert_eq!(self.async_state.current_cell, core::ptr::null_mut());
         Self {
             nexus: Arc::clone(&self.nexus),
@@ -254,13 +254,13 @@ where
                 let poll = (*mut_self.nexus_details.tail_wait_strategy).poll_ptr(
                     cx,
                     &(*mut_self.nexus_details.tail),
-                    &mut mut_self.async_state.current_event,
+                    &mut mut_self.async_state.async_state,
                 );
                 if let Poll::Ready(ptr) = poll {
-                    debug_assert!(mut_self.async_state.current_event.is_none());
+                    debug_assert!(mut_self.async_state.async_state.is_none());
                     mut_self.async_state.current_cell = ptr;
                 } else {
-                    debug_assert!(mut_self.async_state.current_event.is_some());
+                    debug_assert!(mut_self.async_state.async_state.is_some());
                     return Poll::Pending;
                 }
             }
@@ -268,10 +268,10 @@ where
             //wait for the cell to become available for writing
             debug_assert!(!mut_self.async_state.current_cell.is_null());
             match (*mut_self.async_state.current_cell)
-                .poll_write_safe(cx, &mut mut_self.async_state.current_event)
+                .poll_write_safe(cx, &mut mut_self.async_state.async_state)
             {
                 Poll::Ready(_) => {
-                    debug_assert!(mut_self.async_state.current_event.is_none());
+                    debug_assert!(mut_self.async_state.async_state.is_none());
                     let claimed = (*mut_self.nexus_details.claimed).fetch_add(1, Ordering::Relaxed);
                     mut_self.async_state.claimed = claimed;
 
@@ -283,7 +283,7 @@ where
                     Poll::Ready(Ok(()))
                 }
                 Poll::Pending => {
-                    debug_assert!(mut_self.async_state.current_event.is_some());
+                    debug_assert!(mut_self.async_state.async_state.is_some());
                     Poll::Pending
                 }
             }
@@ -292,7 +292,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         debug_assert!(!self.async_state.current_cell.is_null());
-        debug_assert!(self.async_state.current_event.is_none());
+        debug_assert!(self.async_state.async_state.is_none());
         unsafe {
             (*self.async_state.current_cell).write_and_publish(item, self.async_state.claimed);
         }

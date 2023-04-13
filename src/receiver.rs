@@ -1,5 +1,6 @@
+use crate::prelude::FastMod;
 use crate::wait_strategy::AsyncEventGuard;
-use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
+use crate::{cell::Cell, NexusDetails, NexusQ};
 use alloc::sync::Arc;
 use core::fmt::Debug;
 use std::pin::Pin;

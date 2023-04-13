@@ -1,5 +1,10 @@
-#[allow(clippy::wildcard_imports)]
-use super::*;
+use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};
+use crate::prelude::FastMod;
+use core::fmt::Debug;
+use event_listener::EventListener;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::time::Instant;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
@@ -39,7 +44,7 @@ impl HybridWait {
     /// //spawn a scoped thread that waits for x to be 1 using wait
     /// thread::scope(|s| {
     ///     let handle = s.spawn(||{
-    ///         wait.wait_for(&x, 1);
+    ///         wait.wait_for(&x, &1);
     ///     });
     ///     //wait for the thread to start
     ///     thread::sleep(std::time::Duration::from_millis(50));
@@ -83,7 +88,7 @@ impl<W> Wait<W> for HybridWait
 where
     W: Waitable,
 {
-    fn wait_for(&self, waitable: &W, expected_value: W::Inner) {
+    fn wait_for(&self, waitable: &W, expected_value: &W::Inner) {
         for _ in 0..self.num_spin {
             if waitable.check(expected_value) {
                 return;
@@ -115,7 +120,7 @@ where
     fn wait_until(
         &self,
         waitable: &W,
-        expected_value: W::Inner,
+        expected_value: &W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError> {
         for n in 0..self.num_spin {
@@ -160,7 +165,7 @@ where
         &self,
         cx: &mut Context<'_>,
         waitable: &W,
-        expected_value: W::Inner,
+        expected_value: &W::Inner,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         if waitable.check(expected_value) {
