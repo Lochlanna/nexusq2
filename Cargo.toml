@@ -20,21 +20,20 @@ backoff = ["crossbeam-utils"]
 
 [dependencies]
 event-listener = { git = "https://github.com/smol-rs/event-listener.git", features=["portable-atomic"]}
-thiserror = "1.0"
-portable-atomic = "1"
-futures = "0.3"
-parking_lot = "0.12"
-crossbeam-utils = {version = "0.8", optional = true}
+thiserror = "1.0.39"
+portable-atomic = "1.0.1"
+futures = "0.3.27"
+crossbeam-utils = {version = "0.8.15", optional = true}
 
 [dev-dependencies]
-criterion = { version = "0.4", features=["async_tokio"]}
-workerpool = "1.2"
-pretty_assertions_sorted = "1.2"
-rand = "0.8"
+criterion = { version = "0.4.0", features=["async_tokio"]}
+workerpool = "1.2.0"
+pretty_assertions_sorted = "1.2.1"
+rand = "0.8.5"
 tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(not(miri))'.dev-dependencies]
-multiqueue2 = "0.1"
+multiqueue2 = "0.1.7"
 
 [profile.release]
 opt-level = 3
