@@ -10,15 +10,8 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
 
-pub trait AsyncEventGuard {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-}
-
-pub trait AsyncEventGuardFactory {
-    type Guard: AsyncEventGuard;
-    fn new_event() -> Option<Self::Guard> {
-        None
-    }
+pub trait AsyncEventGuard: Debug {
+    fn poll_event_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
 }
 
 pub trait Waitable {
@@ -36,7 +29,7 @@ pub trait Notifiable {
     fn notify_one(&self);
 }
 
-pub trait Wait<W: Waitable>: Debug + Notifiable + AsyncEventGuardFactory {
+pub trait Wait<W: Waitable>: Debug + Notifiable {
     /// Wait for the waitable to have the expected value.
     ///
     /// # Arguments
@@ -120,11 +113,11 @@ pub trait Wait<W: Waitable>: Debug + Notifiable + AsyncEventGuardFactory {
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: W::Inner,
-        event_listener: &mut Option<Self::Guard>,
+        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()>;
 }
 
-pub trait Take<T: Takeable>: Debug + Notifiable + AsyncEventGuardFactory {
+pub trait Take<T: Takeable>: Debug + Notifiable {
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block indefinitely.
     ///
@@ -189,7 +182,7 @@ pub trait Take<T: Takeable>: Debug + Notifiable + AsyncEventGuardFactory {
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
-        event_listener: &mut Option<Self::Guard>,
+        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner>;
 }
 
@@ -213,9 +206,9 @@ impl<T> Takeable for AtomicPtr<T> {
     }
 }
 
-impl AsyncEventGuard for Pin<Box<EventListener>> {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.as_mut().poll(cx)
+impl AsyncEventGuard for EventListener {
+    fn poll_event_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.poll(cx)
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::wait_strategy::AsyncEventGuard;
 use crate::{cell, NexusDetails};
 use crate::{FastMod, NexusQ};
 use alloc::sync::Arc;
@@ -30,7 +31,7 @@ pub enum AsyncSendError {
 struct AsyncState<T> {
     current_cell: *mut cell::Cell<T>,
     claimed: usize,
-    current_event: Option<Pin<Box<event_listener::EventListener>>>,
+    current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
 }
 
 impl<T> Default for AsyncState<T> {

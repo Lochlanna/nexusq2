@@ -1,3 +1,4 @@
+use crate::wait_strategy::AsyncEventGuard;
 use crate::{cell::Cell, FastMod, NexusDetails, NexusQ};
 use alloc::sync::Arc;
 use core::fmt::Debug;
@@ -22,7 +23,7 @@ pub struct Receiver<T> {
     cursor: usize,
     previous_cell: *const Cell<T>,
     // this is only used for async!
-    current_event: Option<Pin<Box<event_listener::EventListener>>>,
+    current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]

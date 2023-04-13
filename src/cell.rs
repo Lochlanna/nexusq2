@@ -1,6 +1,5 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::Debug;
-use event_listener::EventListener;
 use portable_atomic::{AtomicUsize, Ordering};
 use std::cell::UnsafeCell;
 use std::pin::Pin;
@@ -47,7 +46,7 @@ impl<T> Cell<T> {
     pub fn poll_write_safe(
         &self,
         cx: &mut Context<'_>,
-        event_listener: &mut Option<Pin<Box<EventListener>>>,
+        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         self.wait_strategy
             .poll(cx, &self.counter, 0, event_listener)
@@ -62,7 +61,7 @@ impl<T> Cell<T> {
         &self,
         cx: &mut Context<'_>,
         expected_published_id: usize,
-        event_listener: &mut Option<Pin<Box<EventListener>>>,
+        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         self.wait_strategy
             .poll(cx, &self.current_id, expected_published_id, event_listener)
