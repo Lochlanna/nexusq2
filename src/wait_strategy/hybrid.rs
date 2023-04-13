@@ -1,8 +1,7 @@
 use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};
-use crate::prelude::FastMod;
 use core::fmt::Debug;
 use event_listener::EventListener;
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -71,7 +70,7 @@ impl HybridWait {
 
 impl Default for HybridWait {
     fn default() -> Self {
-        Self::new(50, 50)
+        Self::new(50, 0)
     }
 }
 
@@ -104,7 +103,7 @@ where
         if waitable.check(expected_value) {
             return;
         }
-        let mut listen_guard = Box::pin(EventListener::new(&self.event));
+        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
@@ -123,12 +122,11 @@ where
         expected_value: &W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError> {
-        for n in 0..self.num_spin {
+        for _ in 0..self.num_spin {
             if waitable.check(expected_value) {
                 return Ok(());
             }
-            // We don't want to do this every time during busy spin as it will slow us down a lot
-            if n.fast_mod(256) == 0 && Instant::now() >= deadline {
+            if Instant::now() >= deadline {
                 return Err(WaitError::Timeout);
             }
             core::hint::spin_loop();
@@ -146,7 +144,7 @@ where
         if waitable.check(expected_value) {
             return Ok(());
         }
-        let mut listen_guard = Box::pin(EventListener::new(&self.event));
+        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if waitable.check(expected_value) {
@@ -219,7 +217,7 @@ where
         if let Some(v) = ptr.try_take() {
             return v;
         }
-        let mut listen_guard = Box::pin(EventListener::new(&self.event));
+        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {
@@ -233,11 +231,11 @@ where
     }
 
     fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
-        for n in 0..self.num_spin {
+        for _ in 0..self.num_spin {
             if let Some(v) = ptr.try_take() {
                 return Ok(v);
             }
-            if n.fast_mod(256) == 0 && Instant::now() >= deadline {
+            if Instant::now() >= deadline {
                 return Err(WaitError::Timeout);
             }
             core::hint::spin_loop();
@@ -254,7 +252,7 @@ where
         if let Some(v) = ptr.try_take() {
             return Ok(v);
         }
-        let mut listen_guard = Box::pin(EventListener::new(&self.event));
+        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
             if let Some(v) = ptr.try_take() {

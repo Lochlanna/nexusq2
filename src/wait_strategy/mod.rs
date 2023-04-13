@@ -1,3 +1,5 @@
+#[cfg(feature = "backoff")]
+pub mod backoff;
 pub mod hybrid;
 
 use core::fmt::Debug;

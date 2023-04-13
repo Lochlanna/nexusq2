@@ -58,7 +58,11 @@ fn multiq2(
     let mut total_duration = Duration::new(0, 0);
     for _ in 0..iters {
         let size = 100_u64.next_power_of_two();
-        let (sender, receiver) = multiqueue2::broadcast_queue(size);
+        // let (sender, receiver) = multiqueue2::broadcast_queue(size);
+        let (sender, receiver) = multiqueue2::broadcast_queue_with(
+            size,
+            multiqueue2::wait::BlockingWait::with_spins(50, 0),
+        );
 
         total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
     }
@@ -144,23 +148,23 @@ fn throughput(c: &mut Criterion) {
                     });
                 },
             );
-             group.bench_with_input(
-                 BenchmarkId::new("multiq2", RunParam(input)),
-                 &input,
-                 |b, &input| {
-                     b.iter_custom(|iters| {
-                         black_box(multiq2(
-                             num_elements,
-                             input.0,
-                             input.1,
-                             &pool,
-                             &tx,
-                             &mut rx,
-                             iters,
-                         ))
-                     });
-                 },
-             );
+            // group.bench_with_input(
+            //     BenchmarkId::new("multiq2", RunParam(input)),
+            //     &input,
+            //     |b, &input| {
+            //         b.iter_custom(|iters| {
+            //             black_box(multiq2(
+            //                 num_elements,
+            //                 input.0,
+            //                 input.1,
+            //                 &pool,
+            //                 &tx,
+            //                 &mut rx,
+            //                 iters,
+            //             ))
+            //         });
+            //     },
+            // );
             group.finish();
         }
     }
