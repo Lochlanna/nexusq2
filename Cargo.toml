@@ -11,7 +11,6 @@ readme = "README.md"
 authors = ["Lochlann Andrews <lochlanna@gmail.com>"]
 categories = ["concurrency", "asynchronous", "data-structures", "algorithms"]
 documentation = "https://docs.rs/nexusq2"
-license-file = "LICENSE"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,11 +18,16 @@ license-file = "LICENSE"
 backoff = ["crossbeam-utils"]
 
 [dependencies]
+# provides blocking wait and async wake functionality
 event-listener = { git = "https://github.com/smol-rs/event-listener.git", features=["portable-atomic"]}
+# Easy errors
 thiserror = "1.0.39"
+# Provides atomics on more systems which will help with compatibility
 portable-atomic = "1.0.1"
-futures = "0.3.27"
-crossbeam-utils = {version = "0.8.15", optional = true}
+# provides sink and stream traits
+futures-util = { version = "0.3.27", default-features = false}
+# provides backoff wait strategy
+crossbeam-utils = {version = "0.8.15", optional = true, default-features = false}
 
 [dev-dependencies]
 criterion = { version = "0.4.0", features=["async_tokio"]}
@@ -31,6 +35,8 @@ workerpool = "1.2.0"
 pretty_assertions_sorted = "1.2.1"
 rand = "0.8.5"
 tokio = { version = "1", features = ["full"] }
+# Redefine here as we need more features in the tests that aren't needed in the library itself
+futures-util = { version = "0.3.27" }
 
 [target.'cfg(not(miri))'.dev-dependencies]
 multiqueue2 = "0.1.7"

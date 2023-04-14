@@ -24,12 +24,15 @@
 //! and allowing other threads to take over the CPU.
 //!
 //! Configuring the wait strategy with 0 spins and 0 yields is allowed and will result in a wait strategy that only blocks.
+//!
+//! ### Warning
+//! The hybrid wait strategy has been optimised for use with NexusQ. It uses atomics in such a way that if
+//! used in other situations it may not work as intended.
 
 use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};
 use core::fmt::Debug;
 use event_listener::EventListener;
 use std::pin::{pin, Pin};
-use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -86,10 +89,9 @@ impl HybridWait {
     ///     //set x to 1
     ///     x.store(1, Ordering::Release);
     ///     //notify the wait strategy
-    ///     portable_atomic::fence(Ordering::Acquire);
     ///     wait.notify_all();
     ///     //check that the thread is finished
-    ///     thread::sleep(std::time::Duration::from_millis(10));
+    ///     thread::sleep(std::time::Duration::from_millis(50));
     ///     assert!(handle.is_finished());
     /// });
     /// ```
@@ -111,8 +113,7 @@ impl Default for HybridWait {
 
 impl Notifiable for HybridWait {
     fn notify_all(&self) {
-        portable_atomic::fence(Ordering::Acquire);
-        self.event.notify_relaxed(usize::MAX);
+        self.event.notify(usize::MAX);
     }
     fn notify_one(&self) {
         self.event.notify_relaxed(1);

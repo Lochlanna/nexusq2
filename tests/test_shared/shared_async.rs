@@ -1,4 +1,4 @@
-use futures::{Sink, SinkExt, Stream, StreamExt};
+use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use nexusq2::make_channel;
 use pretty_assertions_sorted::assert_eq_sorted;
 use std::collections::HashMap;
@@ -61,7 +61,7 @@ pub async fn advanced_test(
     let mut expected_map = HashMap::with_capacity(num);
     expected_map.extend((0..num).map(|i| (i, num_senders)));
 
-    let results: Vec<_> = futures::future::join_all(receivers)
+    let results: Vec<_> = futures_util::future::join_all(receivers)
         .await
         .into_iter()
         .map(|v| v.expect("couldn't join receiver"))

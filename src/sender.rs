@@ -3,7 +3,7 @@ use crate::wait_strategy::AsyncEventGuard;
 use crate::{cell, NexusDetails, NexusQ};
 use alloc::sync::Arc;
 use core::fmt::{Debug, Formatter};
-use futures::Sink;
+use futures_util::Sink;
 use portable_atomic::Ordering;
 use std::pin::Pin;
 use std::task::{Context, Poll};

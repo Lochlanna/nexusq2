@@ -66,6 +66,11 @@ pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
+/// This is an alias for the takable type used to implement the wait strategy.
+/// We have this exported so that we don't need to export the cell type
+#[doc(hidden)]
+pub type TakeableCellPtr<T> = AtomicPtr<cell::Cell<T>>;
+
 /// Errors produces by the core of a nexus channel.
 #[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
 pub enum NexusError {
@@ -80,7 +85,7 @@ pub enum NexusError {
 struct NexusDetails<T> {
     claimed: *const AtomicUsize,
     tail: *const AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: *const dyn Take<AtomicPtr<cell::Cell<T>>>,
+    tail_wait_strategy: *const dyn Take<TakeableCellPtr<T>>,
     buffer_raw: *mut cell::Cell<T>,
     buffer_length: usize,
     num_receivers: *const AtomicUsize,
@@ -112,7 +117,7 @@ struct NexusQ<T> {
     buffer_raw: *mut cell::Cell<T>,
     claimed: AtomicUsize,
     tail: AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: Box<dyn Take<AtomicPtr<cell::Cell<T>>>>,
+    tail_wait_strategy: Box<dyn Take<TakeableCellPtr<T>>>,
     num_receivers: AtomicUsize,
 }
 
@@ -140,7 +145,7 @@ impl<T> NexusQ<T> {
         reader_ws: impl Fn() -> R,
     ) -> Result<Self, NexusError>
     where
-        W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
+        W: Take<TakeableCellPtr<T>> + 'static,
         R: Wait<AtomicUsize> + 'static + Clone,
     {
         if size < 2 {
@@ -232,7 +237,7 @@ pub fn make_channel_with<T, W, R>(
     reader_ws: impl Fn() -> R,
 ) -> Result<(Sender<T>, Receiver<T>), NexusError>
 where
-    W: Take<AtomicPtr<cell::Cell<T>>> + 'static,
+    W: Take<TakeableCellPtr<T>> + 'static,
     R: Wait<AtomicUsize> + 'static + Clone,
 {
     let nexus = Arc::new(NexusQ::with_strategies(size, writer_ws, reader_ws)?);
@@ -244,7 +249,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::StreamExt;
+    use futures_util::SinkExt;
+    use futures_util::StreamExt;
     use pretty_assertions_sorted::assert_eq;
 
     #[test]
@@ -268,25 +274,25 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn basic_channel_async() {
         let (mut sender, mut receiver) = make_channel(4).expect("couldn't construct channel");
-        futures::sink::SinkExt::send(&mut sender, 1)
+        SinkExt::send(&mut sender, 1)
             .await
             .expect("couldn't send async");
-        futures::sink::SinkExt::send(&mut sender, 2)
+        SinkExt::send(&mut sender, 2)
             .await
             .expect("couldn't send async");
-        futures::sink::SinkExt::send(&mut sender, 3)
+        SinkExt::send(&mut sender, 3)
             .await
             .expect("couldn't send async");
         assert_eq!(receiver.next().await.expect("couldn't receive async"), 1);
         assert_eq!(receiver.next().await.expect("couldn't receive async"), 2);
         assert_eq!(receiver.next().await.expect("couldn't receive async"), 3);
-        futures::sink::SinkExt::send(&mut sender, 4)
+        SinkExt::send(&mut sender, 4)
             .await
             .expect("couldn't send async");
-        futures::sink::SinkExt::send(&mut sender, 5)
+        SinkExt::send(&mut sender, 5)
             .await
             .expect("couldn't send async");
-        futures::sink::SinkExt::send(&mut sender, 6)
+        SinkExt::send(&mut sender, 6)
             .await
             .expect("couldn't send async");
         assert_eq!(receiver.next().await.expect("couldn't receive async"), 4);

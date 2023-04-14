@@ -276,7 +276,7 @@ where
     }
 }
 
-impl<T> futures::Stream for Receiver<T>
+impl<T> futures_util::Stream for Receiver<T>
 where
     T: Clone,
 {

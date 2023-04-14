@@ -1,6 +1,9 @@
-use nexusq2::make_channel;
+use nexusq2::make_channel_with;
+use nexusq2::wait_strategy::hybrid::HybridWait;
+use nexusq2::wait_strategy::{Take, Wait};
 use nexusq2::Receiver;
 use nexusq2::Sender;
+use portable_atomic::AtomicUsize;
 use pretty_assertions_sorted::assert_eq_sorted;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,10 +21,12 @@ pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: u
         Duration::default(),
         Duration::default(),
         0.0,
+        HybridWait::default(),
+        HybridWait::default,
     );
 }
 
-pub fn advanced_test(
+pub fn advanced_test<CWS>(
     num_senders: usize,
     num_receivers: usize,
     num: usize,
@@ -29,8 +34,14 @@ pub fn advanced_test(
     receiver_lag: Duration,
     sender_lag: Duration,
     average_jitter: f64,
-) {
-    let (sender, receiver) = make_channel(buffer_size).expect("couldn't construct channel");
+    sender_wait_strategy: impl Take<nexusq2::TakeableCellPtr<usize>> + 'static,
+    cell_wait_strategy: impl Fn() -> CWS,
+) where
+    CWS: Wait<AtomicUsize> + 'static + Clone,
+{
+    let (sender, receiver) =
+        make_channel_with(buffer_size, sender_wait_strategy, cell_wait_strategy)
+            .expect("couldn't construct channel");
 
     let mut receivers: Vec<_> = (0..(num_receivers - 1)).map(|_| receiver.clone()).collect();
     receivers.push(receiver);

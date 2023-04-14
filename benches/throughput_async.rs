@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use futures::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -83,7 +83,7 @@ async fn run_test(
     let start = Instant::now();
     start_barrier.wait().await;
 
-    futures::future::join_all(receiver_handles).await;
+    futures_util::future::join_all(receiver_handles).await;
     let duration = start.elapsed();
     stop_barrier.wait().await;
     duration
