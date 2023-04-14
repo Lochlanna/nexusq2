@@ -276,7 +276,7 @@ impl Takeable for AtomicUsize {
     const TAKEN: Self::Inner = usize::MAX;
 
     fn try_take(&self) -> Option<Self::Inner> {
-        let v = self.swap(usize::MAX, Ordering::Release);
+        let v = self.swap(usize::MAX, Ordering::Acquire);
         if v == Self::TAKEN {
             return None;
         }

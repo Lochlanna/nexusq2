@@ -111,7 +111,7 @@ impl<T> Cell<T> {
 
     pub unsafe fn write_and_publish(&self, value: T, id: usize) {
         let dst = std::ptr::addr_of!(self.value) as *mut Option<T>;
-        let old_value = core::ptr::replace(dst, Some(value));
+        let old_value = (*dst).replace(value);
         self.current_id.store(id, Ordering::Release);
         self.wait_strategy.notify_all();
         drop(old_value);
