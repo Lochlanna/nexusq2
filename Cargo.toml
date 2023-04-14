@@ -25,7 +25,7 @@ thiserror = "1.0.39"
 # Provides atomics on more systems which will help with compatibility
 portable-atomic = "1.0.1"
 # provides sink and stream traits
-futures-util = { version = "0.3.27", default-features = false}
+futures-util = { version = "0.3.27", default-features = false, features = ["sink"] }
 # provides backoff wait strategy
 crossbeam-utils = {version = "0.8.15", optional = true, default-features = false}
 
