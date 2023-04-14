@@ -33,7 +33,10 @@ pub struct Receiver<T> {
     current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
 }
 
-impl<T> Debug for Receiver<T> {
+impl<T> Debug for Receiver<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         // write all members of receiver. For current event write Some or None but not the value of Some (as the value is not Debug)
         f.debug_struct("Receiver")

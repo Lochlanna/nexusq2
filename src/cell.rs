@@ -1,19 +1,21 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::{Debug, Formatter};
 use portable_atomic::{AtomicUsize, Ordering};
-use std::cell::UnsafeCell;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 pub struct Cell<T> {
-    value: UnsafeCell<Option<T>>,
+    value: Option<T>,
     counter: AtomicUsize,
     current_id: AtomicUsize,
     wait_strategy: Box<dyn Wait<AtomicUsize>>,
 }
 
-impl<T> Debug for Cell<T> {
+impl<T> Debug for Cell<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         // write all members of cell excluding wait_strategy
         f.debug_struct("Cell")
@@ -35,7 +37,7 @@ impl<T> Default for Cell<T> {
 impl<T> Cell<T> {
     pub fn new(ws: impl Wait<AtomicUsize> + 'static) -> Self {
         Self {
-            value: UnsafeCell::new(None),
+            value: None,
             counter: AtomicUsize::new(0),
             current_id: AtomicUsize::new(usize::MAX),
             wait_strategy: Box::new(ws),
@@ -108,7 +110,7 @@ impl<T> Cell<T> {
     }
 
     pub unsafe fn write_and_publish(&self, value: T, id: usize) {
-        let dst = self.value.get();
+        let dst = std::ptr::addr_of!(self.value) as *mut Option<T>;
         let old_value = core::ptr::replace(dst, Some(value));
         self.current_id.store(id, Ordering::Release);
         self.wait_strategy.notify_all();
@@ -136,6 +138,6 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        (*self.value.get()).as_ref().unwrap_unchecked().clone()
+        self.value.as_ref().unwrap_unchecked().clone()
     }
 }

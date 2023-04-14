@@ -85,7 +85,10 @@ struct NexusQ<T> {
     num_receivers: AtomicUsize,
 }
 
-impl<T> Debug for NexusQ<T> {
+impl<T> Debug for NexusQ<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         //write all members of nexusq except for the tail_wait_strategy
         f.debug_struct("NexusQ")
