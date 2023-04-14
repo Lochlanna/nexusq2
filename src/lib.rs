@@ -23,7 +23,7 @@
 //! The channel is then used by sending and receiving values using the [`Sender`] and [`Receiver`]
 //! types respectively.
 //!
-//! Both the sender and receiver support the [`futures::Sink`] and [`futures::Stream`] APIs respectively giving them async compatability.
+//! Both the sender and receiver support the [`futures_util::Sink`] and [`futures_util::Stream`] APIs respectively giving them async compatability.
 //!
 //! ```rust
 //! let (sender, mut receiver) = nexusq2::make_channel(4).expect("couldn't construct channel");
@@ -66,7 +66,7 @@ pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
 
-/// This is an alias for the takable type used to implement the wait strategy.
+/// This is an alias for the takeable type used to implement the wait strategy.
 /// We have this exported so that we don't need to export the cell type
 #[doc(hidden)]
 pub type TakeableCellPtr<T> = AtomicPtr<cell::Cell<T>>;
