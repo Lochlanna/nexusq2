@@ -44,32 +44,6 @@ fn nexus(
 
     total_duration
 }
-
-#[allow(dead_code)]
-fn multiq2(
-    num: usize,
-    writers: usize,
-    readers: usize,
-    pool: &Pool<ThunkWorker<()>>,
-    tx: &std::sync::mpsc::Sender<()>,
-    rx: &mut std::sync::mpsc::Receiver<()>,
-    iters: u64,
-) -> Duration {
-    let mut total_duration = Duration::new(0, 0);
-    for _ in 0..iters {
-        let size = 100_u64.next_power_of_two();
-        // let (sender, receiver) = multiqueue2::broadcast_queue(size);
-        let (sender, receiver) = multiqueue2::broadcast_queue_with(
-            size,
-            multiqueue2::wait::BlockingWait::with_spins(50, 0),
-        );
-
-        total_duration += run_test(num, writers, readers, pool, tx, rx, sender, receiver);
-    }
-
-    total_duration
-}
-
 #[allow(clippy::too_many_arguments)]
 fn run_test(
     num: usize,
@@ -148,24 +122,6 @@ fn throughput(c: &mut Criterion) {
                     });
                 },
             );
-            group.bench_with_input(
-                BenchmarkId::new("multiq2", RunParam(input)),
-                &input,
-                |b, &input| {
-                    b.iter_custom(|iters| {
-                        black_box(multiq2(
-                            num_elements,
-                            input.0,
-                            input.1,
-                            &pool,
-                            &tx,
-                            &mut rx,
-                            iters,
-                        ))
-                    });
-                },
-            );
-            group.finish();
         }
     }
 }

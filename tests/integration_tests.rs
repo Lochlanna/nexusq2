@@ -148,18 +148,4 @@ mod latency_tests {
         }
         println!("that took, {}", total_duration.as_nanos() / num_sent);
     }
-
-    #[test]
-    #[ignore]
-    #[cfg(not(miri))]
-    fn mq2_latency() {
-        let mut total_duration = Duration::from_nanos(0);
-        let (sender, receiver) = multiqueue2::broadcast_queue(128);
-        let num_sent = 500;
-        for _ in 0..num_sent {
-            sender.try_send(Instant::now()).unwrap();
-            total_duration += receiver.recv().unwrap().elapsed();
-        }
-        println!("that took, {}", total_duration.as_nanos() / num_sent);
-    }
 }

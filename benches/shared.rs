@@ -22,26 +22,6 @@ where
     }
 }
 
-impl<T> TestReceiver<T> for multiqueue2::BroadcastReceiver<T>
-where
-    T: 'static + Clone + Send + Sync,
-{
-    #[inline(always)]
-    fn test_recv(&mut self) -> T {
-        loop {
-            let res = self.recv();
-            match res {
-                Ok(v) => return v,
-                Err(_) => panic!("receiver panic multiqueue2"),
-            }
-        }
-    }
-
-    fn another(&self) -> Self {
-        self.add_stream()
-    }
-}
-
 impl<T> TestSender<T> for nexusq2::Sender<T>
 where
     T: Send,
@@ -49,25 +29,6 @@ where
     fn test_send(&mut self, value: T) {
         if self.send(value).is_err() {
             panic!("couldn't send");
-        }
-    }
-
-    fn another(&self) -> Self {
-        self.clone()
-    }
-}
-
-impl<T> TestSender<T> for multiqueue2::BroadcastSender<T>
-where
-    T: 'static + Clone + Send + Sync,
-{
-    #[inline(always)]
-    fn test_send(&mut self, mut value: T) {
-        while let Err(err) = self.try_send(value) {
-            match err {
-                std::sync::mpsc::TrySendError::Full(v) => value = v,
-                std::sync::mpsc::TrySendError::Disconnected(_) => panic!("multiq disconnected"),
-            }
         }
     }
 
