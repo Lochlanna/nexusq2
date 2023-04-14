@@ -11,7 +11,7 @@ pub mod hybrid;
 
 use core::fmt::Debug;
 use event_listener::EventListener;
-use portable_atomic::{AtomicPtr, AtomicUsize, Ordering};
+use portable_atomic::{AtomicUsize, Ordering};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -68,21 +68,26 @@ pub trait Waitable {
 pub trait Takeable {
     /// The type that is taken from the container
     type Inner;
+    /// The value that is stored in the container when it is empty
+    const TAKEN: Self::Inner;
 
     /// Attempt to take the value from within self
     ///
     /// # Examples
     ///
     /// ```rust
-    ///# use portable_atomic::{AtomicPtr, AtomicUsize};
+    ///# use std::sync::atomic::Ordering;
+    ///# use portable_atomic::{AtomicUsize};
     ///# use nexusq2::wait_strategy::Takeable;
-    /// let ptr = Box::into_raw(Box::new(42));
-    /// let x = AtomicPtr::new(ptr);
-    /// assert_eq!(x.try_take().unwrap(), ptr);
+    /// let x = AtomicUsize::new(42);
+    /// assert_eq!(x.try_take().unwrap(), 42);
     /// assert!(x.try_take().is_none());
-    ///# unsafe { Box::from_raw(ptr) };
+    /// assert_eq!(x.load(Ordering::Acquire), AtomicUsize::TAKEN);
     /// ```
     fn try_take(&self) -> Option<Self::Inner>;
+
+    /// Put a value back into the container
+    fn restore(&self, value: Self::Inner);
 }
 
 /// A type that can be notified when an event occurs
@@ -196,19 +201,22 @@ pub trait Take<T: Takeable>: Notifiable {
     ///
     /// ```rust
     ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
-    ///# use portable_atomic::{AtomicPtr, Ordering};
+    ///# use portable_atomic::{AtomicUsize, Ordering};
     /// let wait = HybridWait::new(50, 50);
-    /// let t = AtomicPtr::new(Box::into_raw(Box::new(1)));
-    /// let ptr = wait.take_ptr(&t);
-    /// assert!(!ptr.is_null());
+    /// let t = AtomicUsize::new(42);
+    /// let val = wait.take(&t);
+    /// assert_eq!(val, 42);
+    /// assert_eq!(t.load(Ordering::Acquire), AtomicUsize::TAKEN);
     /// // We shouldn't be able to take the pointer while it's being held
-    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
+    /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
     /// // put the pointer back in the takeable container
-    /// t.store(ptr, Ordering::Release);
-    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
-    ///# unsafe{Box::from_raw(ptr);}
+    /// t.restore(21);
+    /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
     /// ```
-    fn take_ptr(&self, ptr: &T) -> T::Inner;
+    fn take(&self, ptr: &T) -> T::Inner;
+
+    /// Try to take the value immediately without waiting
+    fn try_take(&self, ptr: &T) -> Option<T::Inner>;
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block until the deadline is reached.
     ///
@@ -225,19 +233,19 @@ pub trait Take<T: Takeable>: Notifiable {
     ///
     /// ```rust
     ///# use nexusq2::wait_strategy::{hybrid::HybridWait, Take, Takeable, Notifiable};
-    ///# use portable_atomic::{AtomicPtr, Ordering};
+    ///# use portable_atomic::{AtomicUsize, Ordering};
     /// let wait = HybridWait::new(50, 50);
-    /// let t = AtomicPtr::new(Box::into_raw(Box::new(1)));
-    /// let ptr = wait.take_ptr(&t);
-    /// assert!(!ptr.is_null());
+    /// let t = AtomicUsize::new(42);
+    /// let val = wait.take(&t);
+    /// assert_eq!(val, 42);
+    /// assert_eq!(t.load(Ordering::Acquire), AtomicUsize::TAKEN);
     /// // We shouldn't be able to take the pointer while it's being held
-    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
+    /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_err());
     /// // put the pointer back in the takeable container
-    /// t.store(ptr, Ordering::Release);
-    /// assert!(wait.take_ptr_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
-    ///# unsafe{Box::from_raw(ptr);}
+    /// t.restore(21);
+    /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
     /// ```
-    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
+    fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
 
     /// Returns immediately with the valid inside takeable if there is one otherwise
     /// it registers the waker to wake the thread when the next notification is triggered.
@@ -247,7 +255,7 @@ pub trait Take<T: Takeable>: Notifiable {
     /// * `cx`: The current context
     /// * `ptr`: A reference to an object that can be taken from
     /// * `event_listener`: A reference to an event listener that will be used to register the waker
-    fn poll_ptr(
+    fn poll(
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
@@ -263,15 +271,21 @@ impl Waitable for AtomicUsize {
     }
 }
 
-impl<T> Takeable for AtomicPtr<T> {
-    type Inner = *mut T;
+impl Takeable for AtomicUsize {
+    type Inner = usize;
+    const TAKEN: Self::Inner = usize::MAX;
 
     fn try_take(&self) -> Option<Self::Inner> {
-        let v = self.swap(core::ptr::null_mut(), Ordering::Acquire);
-        if v.is_null() {
+        let v = self.swap(usize::MAX, Ordering::Release);
+        if v == Self::TAKEN {
             return None;
         }
         Some(v)
+    }
+
+    fn restore(&self, value: Self::Inner) {
+        debug_assert!(self.load(Ordering::Acquire) == usize::MAX);
+        self.store(value, Ordering::Release);
     }
 }
 

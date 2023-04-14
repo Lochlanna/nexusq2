@@ -58,18 +58,13 @@ pub mod wait_strategy;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
-use portable_atomic::{AtomicPtr, AtomicUsize};
+use portable_atomic::AtomicUsize;
 use prelude::FastMod;
 use thiserror::Error as ThisError;
 
 pub use receiver::{Receiver, RecvError};
 pub use sender::{SendError, Sender};
 use wait_strategy::{hybrid::HybridWait, Take, Wait};
-
-/// This is an alias for the takeable type used to implement the wait strategy.
-/// We have this exported so that we don't need to export the cell type
-#[doc(hidden)]
-pub type TakeableCellPtr<T> = AtomicPtr<cell::Cell<T>>;
 
 /// Errors produces by the core of a nexus channel.
 #[derive(Debug, ThisError, Eq, PartialEq, Copy, Clone)]
@@ -82,42 +77,11 @@ pub enum NexusError {
     BufferTooLarge,
 }
 
-struct NexusDetails<T> {
-    claimed: *const AtomicUsize,
-    tail: *const AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: *const dyn Take<TakeableCellPtr<T>>,
-    buffer_raw: *mut cell::Cell<T>,
-    buffer_length: usize,
-    num_receivers: *const AtomicUsize,
-}
-
-impl<T> Debug for NexusDetails<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        //write all members of cell except for tail_wait_strategy
-        f.debug_struct("NexusDetails")
-            .field("claimed", &self.claimed)
-            .field("tail", &self.tail)
-            .field("buffer_raw", &self.buffer_raw)
-            .field("buffer_length", &self.buffer_length)
-            .field("num_receivers", &self.num_receivers)
-            .finish()
-    }
-}
-
-impl<T> Copy for NexusDetails<T> {}
-
-impl<T> Clone for NexusDetails<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
 struct NexusQ<T> {
-    buffer: Vec<cell::Cell<T>>,
-    buffer_raw: *mut cell::Cell<T>,
+    buffer: Arc<[cell::Cell<T>]>,
     claimed: AtomicUsize,
-    tail: AtomicPtr<cell::Cell<T>>,
-    tail_wait_strategy: Box<dyn Take<TakeableCellPtr<T>>>,
+    tail: AtomicUsize,
+    tail_wait_strategy: Box<dyn Take<AtomicUsize>>,
     num_receivers: AtomicUsize,
 }
 
@@ -126,7 +90,6 @@ impl<T> Debug for NexusQ<T> {
         //write all members of nexusq except for the tail_wait_strategy
         f.debug_struct("NexusQ")
             .field("buffer", &self.buffer)
-            .field("buffer_raw", &self.buffer_raw)
             .field("claimed", &self.claimed)
             .field("tail", &self.tail)
             .field("num_receivers", &self.num_receivers)
@@ -145,7 +108,7 @@ impl<T> NexusQ<T> {
         reader_ws: impl Fn() -> R,
     ) -> Result<Self, NexusError>
     where
-        W: Take<TakeableCellPtr<T>> + 'static,
+        W: Take<AtomicUsize> + 'static,
         R: Wait<AtomicUsize> + 'static + Clone,
     {
         if size < 2 {
@@ -159,30 +122,15 @@ impl<T> NexusQ<T> {
         let size = size.maybe_next_power_of_two();
         let mut buffer = Vec::with_capacity(size);
         buffer.resize_with(size, || cell::Cell::new(reader_ws()));
+        let buffer = Arc::from(buffer.into_boxed_slice());
 
-        let buffer_raw = buffer.as_mut_ptr();
-
-        unsafe {
-            Ok(Self {
-                buffer,
-                buffer_raw,
-                claimed: AtomicUsize::new(1),
-                tail: AtomicPtr::new(buffer_raw.add(1)),
-                tail_wait_strategy: Box::new(writer_ws),
-                num_receivers: AtomicUsize::new(0),
-            })
-        }
-    }
-
-    pub fn get_details(&self) -> NexusDetails<T> {
-        NexusDetails {
-            claimed: &self.claimed,
-            tail: &self.tail,
-            tail_wait_strategy: Box::as_ref(&self.tail_wait_strategy),
-            buffer_raw: self.buffer_raw,
-            buffer_length: self.buffer.len(),
-            num_receivers: &self.num_receivers,
-        }
+        Ok(Self {
+            buffer,
+            claimed: AtomicUsize::new(1),
+            tail: AtomicUsize::new(1),
+            tail_wait_strategy: Box::new(writer_ws),
+            num_receivers: AtomicUsize::new(0),
+        })
     }
 }
 
@@ -237,7 +185,7 @@ pub fn make_channel_with<T, W, R>(
     reader_ws: impl Fn() -> R,
 ) -> Result<(Sender<T>, Receiver<T>), NexusError>
 where
-    W: Take<TakeableCellPtr<T>> + 'static,
+    W: Take<AtomicUsize> + 'static,
     R: Wait<AtomicUsize> + 'static + Clone,
 {
     let nexus = Arc::new(NexusQ::with_strategies(size, writer_ws, reader_ws)?);

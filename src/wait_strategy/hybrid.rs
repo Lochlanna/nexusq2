@@ -238,7 +238,7 @@ impl<T> Take<T> for HybridWait
 where
     T: Takeable,
 {
-    fn take_ptr(&self, ptr: &T) -> T::Inner {
+    fn take(&self, ptr: &T) -> T::Inner {
         for _ in 0..self.num_spin {
             if let Some(v) = ptr.try_take() {
                 return v;
@@ -267,7 +267,11 @@ where
         }
     }
 
-    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
+    fn try_take(&self, ptr: &T) -> Option<T::Inner> {
+        ptr.try_take()
+    }
+
+    fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
         for _ in 0..self.num_spin {
             if let Some(v) = ptr.try_take() {
                 return Ok(v);
@@ -304,7 +308,7 @@ where
         }
     }
 
-    fn poll_ptr(
+    fn poll(
         &self,
         cx: &mut Context<'_>,
         ptr: &T,

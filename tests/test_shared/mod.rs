@@ -34,7 +34,7 @@ pub fn advanced_test<CWS>(
     receiver_lag: Duration,
     sender_lag: Duration,
     average_jitter: f64,
-    sender_wait_strategy: impl Take<nexusq2::TakeableCellPtr<usize>> + 'static,
+    sender_wait_strategy: impl Take<AtomicUsize> + 'static,
     cell_wait_strategy: impl Fn() -> CWS,
 ) where
     CWS: Wait<AtomicUsize> + 'static + Clone,

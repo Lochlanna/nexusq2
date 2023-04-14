@@ -90,8 +90,13 @@ where
         expected_value: &W::Inner,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
-        self.hybrid_wait
-            .poll(cx, waitable, expected_value, event_listener)
+        Wait::poll(
+            &self.hybrid_wait,
+            cx,
+            waitable,
+            expected_value,
+            event_listener,
+        )
     }
 }
 
@@ -99,7 +104,7 @@ impl<T> Take<T> for BackoffWait
 where
     T: Takeable,
 {
-    fn take_ptr(&self, ptr: &T) -> T::Inner {
+    fn take(&self, ptr: &T) -> T::Inner {
         let backoff = Backoff::new();
         loop {
             if let Some(val) = ptr.try_take() {
@@ -109,7 +114,11 @@ where
         }
     }
 
-    fn take_ptr_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
+    fn try_take(&self, ptr: &T) -> Option<T::Inner> {
+        ptr.try_take().into()
+    }
+
+    fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
         let backoff = Backoff::new();
         loop {
             if let Some(val) = ptr.try_take() {
@@ -122,12 +131,12 @@ where
         }
     }
 
-    fn poll_ptr(
+    fn poll(
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner> {
-        self.hybrid_wait.poll_ptr(cx, ptr, event_listener)
+        Take::poll(&self.hybrid_wait, cx, ptr, event_listener)
     }
 }
