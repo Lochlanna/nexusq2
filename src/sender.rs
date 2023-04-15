@@ -39,7 +39,7 @@ impl MessageId for usize {
 /// The pending state of an async send operation.
 #[derive(Default)]
 struct AsyncState {
-    cell_id: Option<usize>,
+    cell_index: Option<usize>,
     claimed: usize,
     event_guard: Option<Pin<Box<dyn AsyncEventGuard>>>,
 }
@@ -48,7 +48,7 @@ impl Debug for AsyncState {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         //write all members of AsyncState. For async_state write "Some" or "None" but not the value of Some (as the value is not Debug)
         f.debug_struct("AsyncState")
-            .field("current_cell", &self.cell_id)
+            .field("current_cell", &self.cell_index)
             .field("claimed", &self.claimed)
             .field(
                 "async_state",
@@ -89,7 +89,7 @@ impl<T> Sender<T> {
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
         debug_assert!(self.async_state.event_guard.is_none());
-        debug_assert!(self.async_state.cell_id.is_none());
+        debug_assert!(self.async_state.cell_index.is_none());
         Self {
             nexus: Arc::clone(&self.nexus),
             buffer: Arc::clone(&self.buffer),
@@ -122,15 +122,16 @@ where
             if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
                 return Err(SendError::Disconnected(Some(value)));
             }
-            let cell_id = self.nexus.tail_wait_strategy.take(&self.nexus.tail);
-            let cell_index = cell_id.fast_mod(self.buffer.len());
+            let cell_index = self.nexus.tail_wait_strategy.take(&self.nexus.tail);
             let cell = self.buffer.get_unchecked(cell_index);
 
             cell.wait_for_write_safe();
 
             let claimed = self.nexus.claimed.fetch_add(1, Ordering::Relaxed);
 
-            self.nexus.tail.restore(cell_id.wrapping_add(1));
+            self.nexus
+                .tail
+                .restore((cell_index + 1).fast_mod(self.buffer.len()));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -163,20 +164,21 @@ where
             if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
                 return Err(SendError::Disconnected(Some(value)));
             }
-            let Some(cell_id) = self.nexus.tail_wait_strategy.try_take(&self.nexus.tail) else {
+            let Some(cell_index) = self.nexus.tail_wait_strategy.try_take(&self.nexus.tail) else {
                 return Err(SendError::Full(value));
             };
-            let cell_index = cell_id.fast_mod(self.buffer.len());
             let cell = self.buffer.get_unchecked(cell_index);
 
             if !cell.safe_to_write() {
-                self.nexus.tail.restore(cell_id);
+                self.nexus.tail.restore(cell_index);
                 return Err(SendError::Full(value));
             }
 
             let claimed = (self.nexus.claimed).fetch_add(1, Ordering::Relaxed);
 
-            (self.nexus.tail).restore(cell_id.wrapping_add(1));
+            self.nexus
+                .tail
+                .restore((cell_index + 1).fast_mod(self.buffer.len()));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -218,19 +220,20 @@ where
                 return Err(SendError::Timeout(value));
             }
 
-            let Ok(cell_id) = self.nexus.tail_wait_strategy
+            let Ok(cell_index) = self.nexus.tail_wait_strategy
                 .take_before(&(self.nexus.tail), deadline) else { return Err(SendError::Timeout(value)) };
-            let cell_index = cell_id.fast_mod(self.buffer.len());
             let cell = self.buffer.get_unchecked(cell_index);
 
             if cell.wait_for_write_safe_before(deadline).is_err() {
-                (self.nexus.tail).restore(cell_id);
+                (self.nexus.tail).restore(cell_index);
                 return Err(SendError::Timeout(value));
             }
 
             let claimed = (self.nexus.claimed).fetch_add(1, Ordering::Relaxed);
 
-            self.nexus.tail.restore(cell_id.wrapping_add(1));
+            self.nexus
+                .tail
+                .restore((cell_index + 1).fast_mod(self.buffer.len()));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -253,28 +256,27 @@ where
         let mut_self = Pin::get_mut(self);
         unsafe {
             //claim the id first
-            let cell_id = match mut_self.async_state.cell_id {
+            let cell_index = match mut_self.async_state.cell_index {
                 None => {
                     match mut_self.nexus.tail_wait_strategy.poll(
                         cx,
                         &mut_self.nexus.tail,
                         &mut mut_self.async_state.event_guard,
                     ) {
-                        Poll::Ready(cell_id) => {
-                            mut_self.async_state.cell_id = Some(cell_id);
-                            cell_id
+                        Poll::Ready(index) => {
+                            mut_self.async_state.cell_index = Some(index);
+                            index
                         }
                         Poll::Pending => {
                             return Poll::Pending;
                         }
                     }
                 }
-                Some(cell_id) => cell_id,
+                Some(index) => index,
             };
 
-            debug_assert!(mut_self.async_state.cell_id.is_some());
+            debug_assert!(mut_self.async_state.cell_index.is_some());
 
-            let cell_index = cell_id.fast_mod(mut_self.buffer.len());
             let cell = mut_self.buffer.get_unchecked(cell_index);
 
             //wait for the cell to become available for writing
@@ -283,7 +285,10 @@ where
                     debug_assert!(mut_self.async_state.event_guard.is_none());
                     let claimed = mut_self.nexus.claimed.fetch_add(1, Ordering::Relaxed);
                     mut_self.async_state.claimed = claimed;
-                    mut_self.nexus.tail.restore(cell_id.wrapping_add(1));
+                    mut_self
+                        .nexus
+                        .tail
+                        .restore((cell_index + 1).fast_mod(mut_self.buffer.len()));
                     mut_self.nexus.tail_wait_strategy.notify_one();
                     Poll::Ready(Ok(()))
                 }
@@ -296,16 +301,15 @@ where
     }
 
     fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
-        debug_assert!(self.async_state.cell_id.is_some());
+        debug_assert!(self.async_state.cell_index.is_some());
         debug_assert!(self.async_state.event_guard.is_none());
 
-        let cell_id = self.async_state.cell_id.unwrap();
-        let cell_index = cell_id.fast_mod(self.buffer.len());
+        let cell_index = self.async_state.cell_index.unwrap();
         unsafe {
             let cell = self.buffer.get_unchecked(cell_index);
             cell.write_and_publish(item, self.async_state.claimed);
         }
-        self.get_mut().async_state.cell_id = None;
+        self.get_mut().async_state.cell_index = None;
         Ok(())
     }
 
