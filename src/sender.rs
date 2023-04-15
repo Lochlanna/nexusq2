@@ -130,7 +130,7 @@ where
 
             let claimed = self.nexus.claimed.fetch_add(1, Ordering::Relaxed);
 
-            self.nexus.tail.restore(cell_id + 1);
+            self.nexus.tail.restore(cell_id.wrapping_add(1));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -176,7 +176,7 @@ where
 
             let claimed = (self.nexus.claimed).fetch_add(1, Ordering::Relaxed);
 
-            (self.nexus.tail).restore(cell_id + 1);
+            (self.nexus.tail).restore(cell_id.wrapping_add(1));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -230,7 +230,7 @@ where
 
             let claimed = (self.nexus.claimed).fetch_add(1, Ordering::Relaxed);
 
-            self.nexus.tail.restore(cell_id + 1);
+            self.nexus.tail.restore(cell_id.wrapping_add(1));
 
             self.nexus.tail_wait_strategy.notify_one();
 
@@ -283,7 +283,7 @@ where
                     debug_assert!(mut_self.async_state.event_guard.is_none());
                     let claimed = mut_self.nexus.claimed.fetch_add(1, Ordering::Relaxed);
                     mut_self.async_state.claimed = claimed;
-                    mut_self.nexus.tail.restore(cell_id + 1);
+                    mut_self.nexus.tail.restore(cell_id.wrapping_add(1));
                     mut_self.nexus.tail_wait_strategy.notify_one();
                     Poll::Ready(Ok(()))
                 }
