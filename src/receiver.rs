@@ -299,7 +299,7 @@ where
                 mut_self.previous_cell_index = current_index;
                 mut_self.cursor = mut_self.cursor.wrapping_add(1);
 
-                unsafe { Poll::Ready(current_cell.read_opt()) }
+                Poll::Ready(current_cell.read_opt())
             }
             Poll::Pending => Poll::Pending,
         }

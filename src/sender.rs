@@ -129,7 +129,6 @@ where
         cell.wait_for_write_safe();
 
         nexus.write_head.restore(id.wrapping_add(1));
-
         nexus.write_head_wait_strategy.notify_one();
 
         cell.write_and_publish(value, id);
@@ -241,13 +240,15 @@ where
             return Poll::Ready(Err(SendError::Disconnected(None)));
         }
         let mut_self = Pin::get_mut(self);
+        let nexus = mut_self.nexus.as_ref();
+        let buffer = mut_self.buffer.as_ref();
         unsafe {
             //claim the id first
             let id = match mut_self.async_state.id {
                 None => {
-                    match mut_self.nexus.write_head_wait_strategy.poll(
+                    match nexus.write_head_wait_strategy.poll(
                         cx,
-                        &mut_self.nexus.write_head,
+                        &nexus.write_head,
                         &mut mut_self.async_state.event_guard,
                     ) {
                         Poll::Ready(id) => {
@@ -264,16 +265,16 @@ where
 
             debug_assert!(mut_self.async_state.id.is_some());
 
-            let cell_index = id.fast_mod(mut_self.buffer.len());
+            let cell_index = id.fast_mod(buffer.len());
 
-            let cell = mut_self.buffer.get_unchecked(cell_index);
+            let cell = buffer.get_unchecked(cell_index);
 
             //wait for the cell to become available for writing
             match cell.poll_write_safe(cx, &mut mut_self.async_state.event_guard) {
                 Poll::Ready(_) => {
                     debug_assert!(mut_self.async_state.event_guard.is_none());
-                    mut_self.nexus.write_head.restore(id.wrapping_add(1));
-                    mut_self.nexus.write_head_wait_strategy.notify_one();
+                    nexus.write_head.restore(id.wrapping_add(1));
+                    nexus.write_head_wait_strategy.notify_one();
                     Poll::Ready(Ok(()))
                 }
                 Poll::Pending => {
@@ -290,7 +291,7 @@ where
 
         let mut_self = unsafe { self.get_unchecked_mut() };
 
-        let id = mut_self.async_state.id.take().unwrap();
+        let id = unsafe { mut_self.async_state.id.take().unwrap_unchecked() };
         let cell_index = id.fast_mod(mut_self.buffer.len());
         let cell = unsafe { mut_self.buffer.get_unchecked(cell_index) };
         cell.write_and_publish(item, id);
