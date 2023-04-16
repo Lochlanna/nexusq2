@@ -79,7 +79,6 @@ pub enum NexusError {
 
 struct NexusQ<T> {
     buffer: Arc<[cell::Cell<T>]>,
-    claimed: AtomicUsize,
     tail: AtomicUsize,
     tail_wait_strategy: Box<dyn Take<AtomicUsize>>,
     num_receivers: AtomicUsize,
@@ -93,7 +92,6 @@ where
         //write all members of nexusq except for the tail_wait_strategy
         f.debug_struct("NexusQ")
             .field("buffer", &self.buffer)
-            .field("claimed", &self.claimed)
             .field("tail", &self.tail)
             .field("num_receivers", &self.num_receivers)
             .finish()
@@ -129,7 +127,6 @@ impl<T> NexusQ<T> {
 
         Ok(Self {
             buffer,
-            claimed: AtomicUsize::new(1),
             tail: AtomicUsize::new(1),
             tail_wait_strategy: Box::new(writer_ws),
             num_receivers: AtomicUsize::new(0),

@@ -127,21 +127,19 @@ where
     /// assert_eq!(receiver.recv(), 1);
     /// ```
     pub fn recv(&mut self) -> T {
-        unsafe {
-            let current_index = self.cursor.fast_mod(self.buffer.len());
-            let current_cell = self.buffer.get_unchecked(current_index);
+        let current_index = self.cursor.fast_mod(self.buffer.len());
+        let current_cell = unsafe { self.buffer.get_unchecked(current_index) };
 
-            current_cell.wait_for_published(self.cursor);
+        current_cell.wait_for_published(self.cursor);
 
-            let previous_cell = self.buffer.get_unchecked(self.previous_cell_index);
-            current_cell.move_to();
-            previous_cell.move_from();
+        let previous_cell = unsafe { self.buffer.get_unchecked(self.previous_cell_index) };
+        current_cell.move_to();
+        previous_cell.move_from();
 
-            self.previous_cell_index = current_index;
-            self.cursor = self.cursor.wrapping_add(1);
+        self.previous_cell_index = current_index;
+        self.cursor = self.cursor.wrapping_add(1);
 
-            current_cell.read()
-        }
+        unsafe { current_cell.read() }
     }
 
     /// Attempt to read up to `max_results` values from the channel. If there are less than `max_results` values available
@@ -173,49 +171,40 @@ where
     ///# assert_eq!(receiver.try_recv().expect("recv failed"), 256);
     /// ```
     pub fn try_recv_batch(&mut self, mut max_results: usize, buffer: &mut Vec<T>) -> usize {
-        max_results = max_results.clamp(0, self.buffer.len() - 1);
         if max_results == 0 {
             return 0;
         }
-        unsafe {
-            let mut current_claimed = self.nexus.claimed.load(Ordering::Acquire);
-            let current_claimed_index = current_claimed.fast_mod(self.buffer.len());
-            let current_claimed_cell = self.buffer.get_unchecked(current_claimed_index);
-            if current_claimed_cell.get_published() < current_claimed {
-                // This means that the current claimed cell has not been published yet.
-                current_claimed -= 1;
+        max_results = max_results.clamp(0, self.buffer.len() - 1);
+
+        buffer.reserve(max_results);
+        let mut cell = None;
+        let mut cell_index = 0;
+        let mut num_read = 0;
+        for i in 0..max_results {
+            let index = (self.cursor + i).fast_mod(self.buffer.len());
+            let current_cell = unsafe { self.buffer.get_unchecked(index) };
+            if current_cell.get_published() != self.cursor + i {
+                // We have read all available values
+                break;
             }
-            if current_claimed <= self.cursor {
-                return 0;
-            }
-            let num_available = current_claimed - self.cursor;
-            debug_assert!(num_available > 0);
-
-            let num_to_read = num_available.min(max_results);
-
-            buffer.reserve(num_to_read);
-
-            let mut cell = None;
-            let mut cell_index = 0;
-            for i in 0..num_to_read {
-                cell_index = (self.cursor + i).fast_mod(self.buffer.len());
-                let current_cell = self.buffer.get_unchecked(cell_index);
-                debug_assert_eq!(current_cell.get_published(), self.cursor + i);
+            unsafe {
                 buffer.push(current_cell.read());
-                cell = Some(current_cell);
             }
-
-            self.cursor += num_to_read;
-
-            if let Some(cell) = cell {
-                cell.move_to();
-                let previous_cell = self.buffer.get_unchecked(self.previous_cell_index);
-                previous_cell.move_from();
-                self.previous_cell_index = cell_index;
-            }
-
-            num_to_read
+            cell = Some(current_cell);
+            cell_index = index;
+            num_read += 1;
         }
+
+        self.cursor += num_read;
+
+        if let Some(cell) = cell {
+            cell.move_to();
+            let previous_cell = unsafe { self.buffer.get_unchecked(self.previous_cell_index) };
+            previous_cell.move_from();
+            self.previous_cell_index = cell_index;
+        }
+
+        num_read
     }
 
     /// Wait for the next value to become available for up to the deadline time.
@@ -234,26 +223,24 @@ where
     /// assert_eq!(receiver.try_recv_until(deadline), Err(RecvError::Timeout));
     /// ```
     pub fn try_recv_until(&mut self, deadline: Instant) -> Result<T, RecvError> {
-        unsafe {
-            let current_index = self.cursor.fast_mod(self.buffer.len());
-            let current_cell = self.buffer.get_unchecked(current_index);
+        let current_index = self.cursor.fast_mod(self.buffer.len());
+        let current_cell = unsafe { self.buffer.get_unchecked(current_index) };
 
-            if current_cell
-                .wait_for_published_until(self.cursor, deadline)
-                .is_err()
-            {
-                return Err(RecvError::Timeout);
-            };
+        if current_cell
+            .wait_for_published_until(self.cursor, deadline)
+            .is_err()
+        {
+            return Err(RecvError::Timeout);
+        };
 
-            let previous_cell = self.buffer.get_unchecked(self.previous_cell_index);
-            current_cell.move_to();
-            previous_cell.move_from();
+        let previous_cell = unsafe { self.buffer.get_unchecked(self.previous_cell_index) };
+        current_cell.move_to();
+        previous_cell.move_from();
 
-            self.previous_cell_index = current_index;
-            self.cursor = self.cursor.wrapping_add(1);
+        self.previous_cell_index = current_index;
+        self.cursor = self.cursor.wrapping_add(1);
 
-            Ok(current_cell.read())
-        }
+        unsafe { Ok(current_cell.read()) }
     }
 
     /// Attempts to immediately read the next value. If a new value is not available immediately an
@@ -273,23 +260,21 @@ where
     /// assert_eq!(receiver.try_recv(), Err(RecvError::NoNewData));
     /// ```
     pub fn try_recv(&mut self) -> Result<T, RecvError> {
-        unsafe {
-            let current_index = self.cursor.fast_mod(self.buffer.len());
-            let current_cell = self.buffer.get_unchecked(current_index);
+        let current_index = self.cursor.fast_mod(self.buffer.len());
+        let current_cell = unsafe { self.buffer.get_unchecked(current_index) };
 
-            if current_cell.get_published() != self.cursor {
-                return Err(RecvError::NoNewData);
-            }
-
-            let previous_cell = self.buffer.get_unchecked(self.previous_cell_index);
-            current_cell.move_to();
-            previous_cell.move_from();
-
-            self.previous_cell_index = current_index;
-            self.cursor = self.cursor.wrapping_add(1);
-
-            Ok(current_cell.read())
+        if current_cell.get_published() != self.cursor {
+            return Err(RecvError::NoNewData);
         }
+
+        let previous_cell = unsafe { self.buffer.get_unchecked(self.previous_cell_index) };
+        current_cell.move_to();
+        previous_cell.move_from();
+
+        self.previous_cell_index = current_index;
+        self.cursor = self.cursor.wrapping_add(1);
+
+        unsafe { Ok(current_cell.read()) }
     }
 }
 
@@ -300,24 +285,23 @@ where
     type Item = T;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        unsafe {
-            let mut_self = Pin::get_mut(self);
-            let current_index = mut_self.cursor.fast_mod(mut_self.buffer.len());
-            let current_cell = mut_self.buffer.get_unchecked(current_index);
+        let mut_self = Pin::get_mut(self);
+        let current_index = mut_self.cursor.fast_mod(mut_self.buffer.len());
+        let current_cell = unsafe { mut_self.buffer.get_unchecked(current_index) };
 
-            match current_cell.poll_published(cx, mut_self.cursor, &mut mut_self.current_event) {
-                Poll::Ready(_) => {
-                    let previous_cell = mut_self.buffer.get_unchecked(mut_self.previous_cell_index);
-                    current_cell.move_to();
-                    previous_cell.move_from();
+        match current_cell.poll_published(cx, mut_self.cursor, &mut mut_self.current_event) {
+            Poll::Ready(_) => {
+                let previous_cell =
+                    unsafe { mut_self.buffer.get_unchecked(mut_self.previous_cell_index) };
+                current_cell.move_to();
+                previous_cell.move_from();
 
-                    mut_self.previous_cell_index = current_index;
-                    mut_self.cursor = mut_self.cursor.wrapping_add(1);
+                mut_self.previous_cell_index = current_index;
+                mut_self.cursor = mut_self.cursor.wrapping_add(1);
 
-                    Poll::Ready(Some(current_cell.read()))
-                }
-                Poll::Pending => Poll::Pending,
+                unsafe { Poll::Ready(Some(current_cell.read())) }
             }
+            Poll::Pending => Poll::Pending,
         }
     }
 }
