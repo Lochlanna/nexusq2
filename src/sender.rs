@@ -122,15 +122,15 @@ where
         if nexus.num_receivers.load(Ordering::Relaxed) == 0 {
             return Err(SendError::Disconnected(Some(value)));
         }
-        let id = nexus.tail_wait_strategy.take(&nexus.tail);
+        let id = nexus.write_head_wait_strategy.take(&nexus.write_head);
         let cell_index = id.fast_mod(buffer.len());
         let cell = unsafe { buffer.get_unchecked(cell_index) };
 
         cell.wait_for_write_safe();
 
-        nexus.tail.restore(id + 1);
+        nexus.write_head.restore(id + 1);
 
-        nexus.tail_wait_strategy.notify_one();
+        nexus.write_head_wait_strategy.notify_one();
 
         cell.write_and_publish(value, id);
         Ok(())
@@ -159,20 +159,20 @@ where
         if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
             return Err(SendError::Disconnected(Some(value)));
         }
-        let Some(id) = self.nexus.tail_wait_strategy.try_take(&self.nexus.tail) else {
+        let Some(id) = self.nexus.write_head_wait_strategy.try_take(&self.nexus.write_head) else {
             return Err(SendError::Full(value));
         };
         let cell_index = id.fast_mod(self.buffer.len());
         let cell = unsafe { self.buffer.get_unchecked(cell_index) };
 
         if !cell.safe_to_write() {
-            self.nexus.tail.restore(id);
+            self.nexus.write_head.restore(id);
             return Err(SendError::Full(value));
         }
 
-        self.nexus.tail.restore(id + 1);
+        self.nexus.write_head.restore(id + 1);
 
-        self.nexus.tail_wait_strategy.notify_one();
+        self.nexus.write_head_wait_strategy.notify_one();
 
         cell.write_and_publish(value, id);
 
@@ -210,20 +210,20 @@ where
             return Err(SendError::Timeout(value));
         }
 
-        let Ok(id) = self.nexus.tail_wait_strategy
-            .take_before(&self.nexus.tail, deadline) else { return Err(SendError::Timeout(value)) };
+        let Ok(id) = self.nexus.write_head_wait_strategy
+            .take_before(&self.nexus.write_head, deadline) else { return Err(SendError::Timeout(value)) };
 
         let cell_index = id.fast_mod(self.buffer.len());
         let cell = unsafe { self.buffer.get_unchecked(cell_index) };
 
         if cell.wait_for_write_safe_before(deadline).is_err() {
-            self.nexus.tail.restore(id);
+            self.nexus.write_head.restore(id);
             return Err(SendError::Timeout(value));
         }
 
-        self.nexus.tail.restore(id + 1);
+        self.nexus.write_head.restore(id + 1);
 
-        self.nexus.tail_wait_strategy.notify_one();
+        self.nexus.write_head_wait_strategy.notify_one();
 
         cell.write_and_publish(value, id);
         Ok(())
@@ -245,9 +245,9 @@ where
             //claim the id first
             let id = match mut_self.async_state.id {
                 None => {
-                    match mut_self.nexus.tail_wait_strategy.poll(
+                    match mut_self.nexus.write_head_wait_strategy.poll(
                         cx,
-                        &mut_self.nexus.tail,
+                        &mut_self.nexus.write_head,
                         &mut mut_self.async_state.event_guard,
                     ) {
                         Poll::Ready(id) => {
@@ -272,8 +272,8 @@ where
             match cell.poll_write_safe(cx, &mut mut_self.async_state.event_guard) {
                 Poll::Ready(_) => {
                     debug_assert!(mut_self.async_state.event_guard.is_none());
-                    mut_self.nexus.tail.restore(id + 1);
-                    mut_self.nexus.tail_wait_strategy.notify_one();
+                    mut_self.nexus.write_head.restore(id + 1);
+                    mut_self.nexus.write_head_wait_strategy.notify_one();
                     Poll::Ready(Ok(()))
                 }
                 Poll::Pending => {
