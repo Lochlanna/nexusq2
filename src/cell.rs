@@ -140,4 +140,8 @@ where
     pub unsafe fn read(&self) -> T {
         self.value.as_ref().unwrap_unchecked().clone()
     }
+
+    pub fn read_opt(&self) -> Option<T> {
+        self.value.clone()
+    }
 }

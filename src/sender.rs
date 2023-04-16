@@ -128,7 +128,7 @@ where
 
         cell.wait_for_write_safe();
 
-        nexus.write_head.restore(id + 1);
+        nexus.write_head.restore(id.wrapping_add(1));
 
         nexus.write_head_wait_strategy.notify_one();
 
@@ -170,7 +170,7 @@ where
             return Err(SendError::Full(value));
         }
 
-        self.nexus.write_head.restore(id + 1);
+        self.nexus.write_head.restore(id.wrapping_add(1));
 
         self.nexus.write_head_wait_strategy.notify_one();
 
@@ -221,7 +221,7 @@ where
             return Err(SendError::Timeout(value));
         }
 
-        self.nexus.write_head.restore(id + 1);
+        self.nexus.write_head.restore(id.wrapping_add(1));
 
         self.nexus.write_head_wait_strategy.notify_one();
 
@@ -272,7 +272,7 @@ where
             match cell.poll_write_safe(cx, &mut mut_self.async_state.event_guard) {
                 Poll::Ready(_) => {
                     debug_assert!(mut_self.async_state.event_guard.is_none());
-                    mut_self.nexus.write_head.restore(id + 1);
+                    mut_self.nexus.write_head.restore(id.wrapping_add(1));
                     mut_self.nexus.write_head_wait_strategy.notify_one();
                     Poll::Ready(Ok(()))
                 }
