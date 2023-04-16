@@ -213,10 +213,10 @@ pub trait Take<T: Takeable>: Notifiable {
     /// t.restore(21);
     /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
     /// ```
-    fn take(&self, ptr: &T) -> T::Inner;
+    fn take(&self, takeable: &T) -> T::Inner;
 
     /// Try to take the value immediately without waiting
-    fn try_take(&self, ptr: &T) -> Option<T::Inner>;
+    fn try_take(&self, takeable: &T) -> Option<T::Inner>;
     /// Wait for the takeable container to contain a value. Take the value, replacing it with the
     /// default value. This method will block until the deadline is reached.
     ///
@@ -245,7 +245,7 @@ pub trait Take<T: Takeable>: Notifiable {
     /// t.restore(21);
     /// assert!(wait.take_before(&t, std::time::Instant::now() + std::time::Duration::from_millis(5)).is_ok());
     /// ```
-    fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
+    fn take_before(&self, takeable: &T, deadline: Instant) -> Result<T::Inner, WaitError>;
 
     /// Returns immediately with the valid inside takeable if there is one otherwise
     /// it registers the waker to wake the thread when the next notification is triggered.
@@ -258,7 +258,7 @@ pub trait Take<T: Takeable>: Notifiable {
     fn poll(
         &self,
         cx: &mut Context<'_>,
-        ptr: &T,
+        takeable: &T,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner>;
 }
@@ -276,7 +276,7 @@ impl Takeable for AtomicUsize {
     const TAKEN: Self::Inner = usize::MAX;
 
     fn try_take(&self) -> Option<Self::Inner> {
-        let v = self.swap(usize::MAX, Ordering::Acquire);
+        let v = self.swap(Self::TAKEN, Ordering::Acquire);
         if v == Self::TAKEN {
             return None;
         }
@@ -284,7 +284,6 @@ impl Takeable for AtomicUsize {
     }
 
     fn restore(&self, value: Self::Inner) {
-        debug_assert!(self.load(Ordering::Acquire) == usize::MAX);
         self.store(value, Ordering::Release);
     }
 }

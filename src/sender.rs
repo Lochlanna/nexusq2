@@ -118,26 +118,27 @@ where
     /// assert_eq!(receiver.recv(), 2);
     /// ```
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        unsafe {
-            if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-                return Err(SendError::Disconnected(Some(value)));
-            }
-            let cell_index = self.nexus.tail_wait_strategy.take(&self.nexus.tail);
-            let cell = self.buffer.get_unchecked(cell_index);
+        let nexus = self.nexus.as_ref();
+        let buffer = self.buffer.as_ref();
 
-            cell.wait_for_write_safe();
-
-            let claimed = self.nexus.claimed.fetch_add(1, Ordering::Relaxed);
-
-            self.nexus
-                .tail
-                .restore((cell_index + 1).fast_mod(self.buffer.len()));
-
-            self.nexus.tail_wait_strategy.notify_one();
-
-            cell.write_and_publish(value, claimed);
-            Ok(())
+        if nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Err(SendError::Disconnected(Some(value)));
         }
+        let cell_index = nexus.tail_wait_strategy.take(&nexus.tail);
+        let cell = unsafe { buffer.get_unchecked(cell_index) };
+
+        cell.wait_for_write_safe();
+
+        let claimed = nexus.claimed.fetch_add(1, Ordering::Relaxed);
+
+        nexus.tail.restore((cell_index + 1).fast_mod(buffer.len()));
+
+        nexus.tail_wait_strategy.notify_one();
+
+        unsafe {
+            cell.write_and_publish(value, claimed);
+        }
+        Ok(())
     }
 
     /// Attempt to send a value to the channel immediately with no waiting. The given value is

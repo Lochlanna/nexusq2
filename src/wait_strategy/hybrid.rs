@@ -116,7 +116,7 @@ impl Notifiable for HybridWait {
         self.event.notify(usize::MAX);
     }
     fn notify_one(&self) {
-        self.event.notify_relaxed(1);
+        self.event.notify(1);
     }
 }
 
@@ -238,42 +238,42 @@ impl<T> Take<T> for HybridWait
 where
     T: Takeable,
 {
-    fn take(&self, ptr: &T) -> T::Inner {
+    fn take(&self, takeable: &T) -> T::Inner {
         for _ in 0..self.num_spin {
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return v;
             }
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return v;
             }
             std::thread::yield_now();
         }
-        if let Some(v) = ptr.try_take() {
+        if let Some(v) = takeable.try_take() {
             return v;
         }
         let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return v;
             }
             listen_guard.as_mut().wait();
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return v;
             }
         }
     }
 
-    fn try_take(&self, ptr: &T) -> Option<T::Inner> {
-        ptr.try_take()
+    fn try_take(&self, takeable: &T) -> Option<T::Inner> {
+        takeable.try_take()
     }
 
-    fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
+    fn take_before(&self, takeable: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
         for _ in 0..self.num_spin {
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return Ok(v);
             }
             if Instant::now() >= deadline {
@@ -282,7 +282,7 @@ where
             core::hint::spin_loop();
         }
         for _ in 0..self.num_yield {
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return Ok(v);
             }
             if Instant::now() >= deadline {
@@ -290,19 +290,19 @@ where
             }
             std::thread::yield_now();
         }
-        if let Some(v) = ptr.try_take() {
+        if let Some(v) = takeable.try_take() {
             return Ok(v);
         }
         let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
             listen_guard.as_mut().listen();
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return Ok(v);
             }
             if !listen_guard.as_mut().wait_deadline(deadline) {
                 return Err(WaitError::Timeout);
             }
-            if let Some(v) = ptr.try_take() {
+            if let Some(v) = takeable.try_take() {
                 return Ok(v);
             }
         }
@@ -311,10 +311,10 @@ where
     fn poll(
         &self,
         cx: &mut Context<'_>,
-        ptr: &T,
+        takeable: &T,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner> {
-        if let Some(ptr) = ptr.try_take() {
+        if let Some(ptr) = takeable.try_take() {
             *event_listener = None;
             return Poll::Ready(ptr);
         }
@@ -325,14 +325,14 @@ where
         };
 
         loop {
-            if let Some(ptr) = ptr.try_take() {
+            if let Some(ptr) = takeable.try_take() {
                 *event_listener = None;
                 return Poll::Ready(ptr);
             }
             let poll = listen_guard.as_mut().poll_event(cx);
             match poll {
                 Poll::Ready(_) => {
-                    if let Some(ptr) = ptr.try_take() {
+                    if let Some(ptr) = takeable.try_take() {
                         *event_listener = None;
                         return Poll::Ready(ptr);
                     }
