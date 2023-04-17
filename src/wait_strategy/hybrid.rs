@@ -26,7 +26,7 @@
 //! Configuring the wait strategy with 0 spins and 0 yields is allowed and will result in a wait strategy that only blocks.
 //!
 //! ### Warning
-//! The hybrid wait strategy has been optimised for use with NexusQ. It uses atomics in such a way that if
+//! The hybrid wait strategy has been optimised for use with `NexusQ`. It uses atomics in such a way that if
 //! used in other situations it may not work as intended.
 
 use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};

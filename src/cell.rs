@@ -111,7 +111,7 @@ impl<T> Cell<T> {
     }
 
     pub fn write_and_publish(&self, value: T, id: usize) {
-        let dst = std::ptr::addr_of!(self.value) as *mut Option<T>;
+        let dst = UnsafeCell::raw_get(&self.value);
         let old_value = unsafe { (*dst).replace(value) };
         self.current_id.store(id, Ordering::Release);
         self.wait_strategy.notify_all();
@@ -139,9 +139,7 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        unsafe {
-            (*UnsafeCell::raw_get(&self.value)).as_ref().unwrap_unchecked().clone()
-        }
+        (*UnsafeCell::raw_get(&self.value)).as_ref().unwrap_unchecked().clone()
     }
 
     pub fn read_opt(&self) -> Option<T> {
