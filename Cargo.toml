@@ -19,7 +19,7 @@ backoff = ["crossbeam-utils"]
 
 [dependencies]
 # provides blocking wait and async wake functionality
-wake-me = { path = "/Users/lochlanna/CLionProjects/wake_me_when"}
+wake-me = { git = "https://github.com/Lochlanna/wake-me.git"}
 # Easy errors
 thiserror = "1.0.39"
 # Provides atomics on more systems which will help with compatibility
