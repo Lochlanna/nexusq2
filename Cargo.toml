@@ -36,7 +36,7 @@ pretty_assertions_sorted = "1.2.1"
 rand = "0.8.5"
 tokio = { version = "1", features = ["full"] }
 # Redefine here as we need more features in the tests that aren't needed in the library itself
-futures-util = { version = "0.3.27" }
+futures-util = { version = "0.3.28" }
 
 [profile.release]
 opt-level = 3
@@ -45,8 +45,8 @@ debug-assertions = false
 overflow-checks = false
 lto = true
 panic = 'unwind'
-incremental = false
-codegen-units = 1
+incremental = true
+codegen-units = 8
 rpath = false
 
 [profile.dev]
