@@ -115,7 +115,7 @@ where
     }
 
     fn try_take(&self, ptr: &T) -> Option<T::Inner> {
-        ptr.try_take().into()
+        ptr.try_take()
     }
 
     fn take_before(&self, ptr: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
