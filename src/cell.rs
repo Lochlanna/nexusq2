@@ -1,12 +1,13 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::{Debug, Formatter};
+use std::cell::UnsafeCell;
 use portable_atomic::{AtomicUsize, Ordering};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 pub struct Cell<T> {
-    value: Option<T>,
+    value: UnsafeCell<Option<T>>,
     counter: AtomicUsize,
     current_id: AtomicUsize,
     wait_strategy: Box<dyn Wait<AtomicUsize>>,
@@ -37,7 +38,7 @@ impl<T> Default for Cell<T> {
 impl<T> Cell<T> {
     pub fn new(ws: impl Wait<AtomicUsize> + 'static) -> Self {
         Self {
-            value: None,
+            value: UnsafeCell::new(None),
             counter: AtomicUsize::new(0),
             current_id: AtomicUsize::new(usize::MAX),
             wait_strategy: Box::new(ws),
@@ -138,10 +139,14 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        self.value.as_ref().unwrap_unchecked().clone()
+        unsafe {
+            (*UnsafeCell::raw_get(&self.value)).as_ref().unwrap_unchecked().clone()
+        }
     }
 
     pub fn read_opt(&self) -> Option<T> {
-        self.value.clone()
+        unsafe {
+            (*UnsafeCell::raw_get(&self.value)).clone()
+        }
     }
 }
