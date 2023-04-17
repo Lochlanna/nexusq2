@@ -11,7 +11,6 @@ use super::{
     block::BlockStrategy, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
 };
 use crossbeam_utils::Backoff;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -87,7 +86,7 @@ where
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: &W::Inner,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()> {
         Wait::poll(&self.block, cx, waitable, expected_value, event_listener)
     }
@@ -128,7 +127,7 @@ where
         &self,
         cx: &mut Context<'_>,
         ptr: &T,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<T::Inner> {
         Take::poll(&self.block, cx, ptr, event_listener)
     }

@@ -1,8 +1,7 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::{Debug, Formatter};
-use std::cell::UnsafeCell;
 use portable_atomic::{AtomicUsize, Ordering};
-use std::pin::Pin;
+use std::cell::UnsafeCell;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
@@ -59,7 +58,7 @@ impl<T> Cell<T> {
     pub fn poll_write_safe(
         &self,
         cx: &mut Context<'_>,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()> {
         self.wait_strategy
             .poll(cx, &self.counter, &0, event_listener)
@@ -74,7 +73,7 @@ impl<T> Cell<T> {
         &self,
         cx: &mut Context<'_>,
         expected_published_id: usize,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()> {
         self.wait_strategy
             .poll(cx, &self.current_id, &expected_published_id, event_listener)
@@ -139,12 +138,13 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        (*UnsafeCell::raw_get(&self.value)).as_ref().unwrap_unchecked().clone()
+        (*UnsafeCell::raw_get(&self.value))
+            .as_ref()
+            .unwrap_unchecked()
+            .clone()
     }
 
     pub fn read_opt(&self) -> Option<T> {
-        unsafe {
-            (*UnsafeCell::raw_get(&self.value)).clone()
-        }
+        unsafe { (*UnsafeCell::raw_get(&self.value)).clone() }
     }
 }

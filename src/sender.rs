@@ -40,7 +40,7 @@ impl MessageId for usize {
 #[derive(Default)]
 struct AsyncState {
     id: Option<usize>,
-    event_guard: Option<Pin<Box<dyn AsyncEventGuard>>>,
+    event_guard: Option<Box<dyn AsyncEventGuard>>,
 }
 
 impl Debug for AsyncState {

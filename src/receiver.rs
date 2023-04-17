@@ -30,7 +30,7 @@ pub struct Receiver<T> {
     cursor: usize,
     previous_cell_index: usize,
     // this is only used for async!
-    current_event: Option<Pin<Box<dyn AsyncEventGuard>>>,
+    current_event: Option<Box<dyn AsyncEventGuard>>,
 }
 
 impl<T> Debug for Receiver<T>

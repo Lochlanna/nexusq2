@@ -19,7 +19,7 @@ backoff = ["crossbeam-utils"]
 
 [dependencies]
 # provides blocking wait and async wake functionality
-event-listener = { git = "https://github.com/Lochlanna/event-listener.git", features=["portable-atomic"]}
+wake-me = { path = "/Users/lochlanna/CLionProjects/wake_me_when"}
 # Easy errors
 thiserror = "1.0.39"
 # Provides atomics on more systems which will help with compatibility
@@ -50,7 +50,7 @@ codegen-units = 8
 rpath = false
 
 [profile.dev]
-#opt-level = 1
+opt-level = 0
 debug = true
 debug-assertions = false
 overflow-checks = false
@@ -65,9 +65,9 @@ rpath = false
 name = "throughput"
 harness = false
 
-[[bench]]
-name = "throughput_async"
-harness = false
+#[[bench]]
+#name = "throughput_async"
+#harness = false
 
 #
 #[[bench]]

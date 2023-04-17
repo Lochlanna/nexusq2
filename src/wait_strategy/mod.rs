@@ -11,10 +11,7 @@ pub mod block;
 pub mod hybrid;
 
 use core::fmt::Debug;
-use event_listener::EventListener;
 use portable_atomic::{AtomicUsize, Ordering};
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
@@ -32,14 +29,7 @@ pub enum WaitError {
 /// held in the form of the type that implements this trait. This allows us to poll that registration on
 /// the event at a later state.
 /// This is only used to implement async behaviour.
-pub trait AsyncEventGuard {
-    /// Poll to see if the event has been triggered
-    ///
-    /// # Arguments
-    ///
-    /// * `cx`: The async context. This is used to register the waker to be woken when the event is triggered
-    fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()>;
-}
+pub trait AsyncEventGuard {}
 
 /// A type that can be waited on by checking if the value matches the expected value
 pub trait Waitable {
@@ -126,7 +116,7 @@ pub trait Wait<W: Waitable>: Notifiable {
     ///     thread::sleep(std::time::Duration::from_millis(50));
     ///     x.store(1, Ordering::Release);
     ///     //notify the wait strategy
-    ///     portable_atomic::fence(Ordering::Acquire);
+    ///     thread::sleep(std::time::Duration::from_millis(50));
     ///     wait.notify_all();
     ///     handle.join().expect("couldn't join thread!")
     /// });
@@ -185,7 +175,7 @@ pub trait Wait<W: Waitable>: Notifiable {
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: &W::Inner,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()>;
 }
 
@@ -260,7 +250,7 @@ pub trait Take<T: Takeable>: Notifiable {
         &self,
         cx: &mut Context<'_>,
         takeable: &T,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<T::Inner>;
 }
 
@@ -289,8 +279,4 @@ impl Takeable for AtomicUsize {
     }
 }
 
-impl AsyncEventGuard for EventListener {
-    fn poll_event(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        self.poll(cx)
-    }
-}
+impl AsyncEventGuard for wake_me::WaitGuard {}
