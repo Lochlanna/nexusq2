@@ -29,10 +29,11 @@
 //! The hybrid wait strategy has been optimised for use with `NexusQ`. It uses atomics in such a way that if
 //! used in other situations it may not work as intended.
 
-use super::{AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable};
+use super::{
+    block::BlockStrategy, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
+};
 use core::fmt::Debug;
-use event_listener::EventListener;
-use std::pin::{pin, Pin};
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -47,7 +48,7 @@ use std::time::Instant;
 pub struct HybridWait {
     num_spin: u64,
     num_yield: u64,
-    event: event_listener::Event,
+    block: BlockStrategy,
 }
 
 impl Clone for HybridWait {
@@ -100,7 +101,7 @@ impl HybridWait {
         Self {
             num_spin,
             num_yield,
-            event: event_listener::Event::new(),
+            block: BlockStrategy::new(),
         }
     }
 }
@@ -113,10 +114,10 @@ impl Default for HybridWait {
 
 impl Notifiable for HybridWait {
     fn notify_all(&self) {
-        self.event.notify(usize::MAX);
+        self.block.notify_all();
     }
     fn notify_one(&self) {
-        self.event.notify(1);
+        self.block.notify_one();
     }
 }
 
@@ -140,17 +141,7 @@ where
         if waitable.check(expected_value) {
             return;
         }
-        let mut listen_guard = pin!(EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if waitable.check(expected_value) {
-                return;
-            }
-            listen_guard.as_mut().wait();
-            if waitable.check(expected_value) {
-                return;
-            }
-        }
+        self.block.wait_for(waitable, expected_value);
     }
 
     fn wait_until(
@@ -181,19 +172,7 @@ where
         if waitable.check(expected_value) {
             return Ok(());
         }
-        let mut listen_guard = pin!(EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if waitable.check(expected_value) {
-                return Ok(());
-            }
-            if !listen_guard.as_mut().wait_deadline(deadline) {
-                return Err(WaitError::Timeout);
-            }
-            if waitable.check(expected_value) {
-                return Ok(());
-            }
-        }
+        self.block.wait_until(waitable, expected_value, deadline)
     }
 
     fn poll(
@@ -203,34 +182,7 @@ where
         expected_value: &W::Inner,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
-        if waitable.check(expected_value) {
-            *event_listener = None;
-            return Poll::Ready(());
-        }
-        #[allow(clippy::option_if_let_else)]
-        let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
-            Some(lg) => lg,
-        };
-        loop {
-            if waitable.check(expected_value) {
-                *event_listener = None;
-                return Poll::Ready(());
-            }
-            let poll = listen_guard.as_mut().poll_event(cx);
-            match poll {
-                Poll::Ready(_) => {
-                    if waitable.check(expected_value) {
-                        *event_listener = None;
-                        return Poll::Ready(());
-                    }
-                    listen_guard = event_listener.insert(self.event.listen());
-                }
-                Poll::Pending => {
-                    return Poll::Pending;
-                }
-            }
-        }
+        Wait::poll(&self.block, cx, waitable, expected_value, event_listener)
     }
 }
 
@@ -254,17 +206,7 @@ where
         if let Some(v) = takeable.try_take() {
             return v;
         }
-        let mut listen_guard = pin!(EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if let Some(v) = takeable.try_take() {
-                return v;
-            }
-            listen_guard.as_mut().wait();
-            if let Some(v) = takeable.try_take() {
-                return v;
-            }
-        }
+        self.block.take(takeable)
     }
 
     fn try_take(&self, takeable: &T) -> Option<T::Inner> {
@@ -293,19 +235,7 @@ where
         if let Some(v) = takeable.try_take() {
             return Ok(v);
         }
-        let mut listen_guard = pin!(EventListener::new(&self.event));
-        loop {
-            listen_guard.as_mut().listen();
-            if let Some(v) = takeable.try_take() {
-                return Ok(v);
-            }
-            if !listen_guard.as_mut().wait_deadline(deadline) {
-                return Err(WaitError::Timeout);
-            }
-            if let Some(v) = takeable.try_take() {
-                return Ok(v);
-            }
-        }
+        self.block.take_before(takeable, deadline)
     }
 
     fn poll(
@@ -314,34 +244,6 @@ where
         takeable: &T,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner> {
-        if let Some(ptr) = takeable.try_take() {
-            *event_listener = None;
-            return Poll::Ready(ptr);
-        }
-        #[allow(clippy::option_if_let_else)]
-        let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
-            Some(lg) => lg,
-        };
-
-        loop {
-            if let Some(ptr) = takeable.try_take() {
-                *event_listener = None;
-                return Poll::Ready(ptr);
-            }
-            let poll = listen_guard.as_mut().poll_event(cx);
-            match poll {
-                Poll::Ready(_) => {
-                    if let Some(ptr) = takeable.try_take() {
-                        *event_listener = None;
-                        return Poll::Ready(ptr);
-                    }
-                    listen_guard = event_listener.insert(self.event.listen());
-                }
-                Poll::Pending => {
-                    return Poll::Pending;
-                }
-            }
-        }
+        Take::poll(&self.block, cx, takeable, event_listener)
     }
 }

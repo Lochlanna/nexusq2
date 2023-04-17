@@ -8,7 +8,7 @@
 //! zero spins and zero yields.
 
 use super::{
-    hybrid::HybridWait, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
+    block::BlockStrategy, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
 };
 use crossbeam_utils::Backoff;
 use std::pin::Pin;
@@ -22,7 +22,7 @@ use std::time::Instant;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct BackoffWait {
-    hybrid_wait: HybridWait,
+    block: BlockStrategy,
 }
 
 impl Clone for BackoffWait {
@@ -34,19 +34,18 @@ impl Clone for BackoffWait {
 impl Default for BackoffWait {
     fn default() -> Self {
         Self {
-            //this is only used for async so we don't want to spin or yield
-            hybrid_wait: HybridWait::new(0, 0),
+            block: BlockStrategy::new(),
         }
     }
 }
 
 impl Notifiable for BackoffWait {
     fn notify_all(&self) {
-        self.hybrid_wait.notify_all();
+        self.block.notify_all();
     }
 
     fn notify_one(&self) {
-        self.hybrid_wait.notify_one();
+        self.block.notify_one();
     }
 }
 
@@ -90,13 +89,7 @@ where
         expected_value: &W::Inner,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
-        Wait::poll(
-            &self.hybrid_wait,
-            cx,
-            waitable,
-            expected_value,
-            event_listener,
-        )
+        Wait::poll(&self.block, cx, waitable, expected_value, event_listener)
     }
 }
 
@@ -137,6 +130,6 @@ where
         ptr: &T,
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<T::Inner> {
-        Take::poll(&self.hybrid_wait, cx, ptr, event_listener)
+        Take::poll(&self.block, cx, ptr, event_listener)
     }
 }
