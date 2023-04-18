@@ -14,7 +14,7 @@
 //!
 //! Yields give up the CPU. This can be a good way to reduce CPU usage while still having
 //! relatively low latency. Yielding should be used with care however as yielding works differently
-//! on different systems. On linux yielding gives much better performance than on MacOS due to the way
+//! on different systems. On Linux yielding gives much better performance than on MacOS due to the way
 //! the scheduler works. On MacOS it's almost never worth yielding vs just blocking immediately. The
 //! default configuration does not use any yielding on any system and this is probably optimal for most use
 //! cases as yield is so unpredictable.

@@ -12,15 +12,20 @@ use std::time::Duration;
 
 pub mod shared_async;
 
+#[derive(Debug, Default)]
+pub struct Lag {
+    pub receiver: Duration,
+    pub sender: Duration,
+    average_jitter: f64,
+}
+
 pub fn test(num_senders: usize, num_receivers: usize, num: usize, buffer_size: usize) {
     advanced_test(
         num_senders,
         num_receivers,
         num,
         buffer_size,
-        Duration::default(),
-        Duration::default(),
-        0.0,
+        Lag::default(),
         HybridWait::default(),
         HybridWait::default,
     );
@@ -31,9 +36,7 @@ pub fn advanced_test<CWS>(
     num_receivers: usize,
     num: usize,
     buffer_size: usize,
-    receiver_lag: Duration,
-    sender_lag: Duration,
-    average_jitter: f64,
+    lag: Lag,
     sender_wait_strategy: impl Take<AtomicUsize> + 'static,
     cell_wait_strategy: impl Fn() -> CWS,
 ) where
@@ -53,7 +56,7 @@ pub fn advanced_test<CWS>(
         .into_iter()
         .map(|receiver| {
             thread::spawn(move || {
-                receive_thread(num_senders, num, receiver_lag, average_jitter, receiver)
+                receive_thread(num_senders, num, lag.receiver, lag.average_jitter, receiver)
             })
         })
         .collect();
@@ -64,7 +67,7 @@ pub fn advanced_test<CWS>(
     for sender in senders {
         let sb_clone = sender_barrier.clone();
         thread::spawn(move || {
-            let sender = sender_thread(num, sender_lag, average_jitter, sender);
+            let sender = sender_thread(num, lag.sender, lag.average_jitter, sender);
             sb_clone.wait();
             drop(sender);
         });
