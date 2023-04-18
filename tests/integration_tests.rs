@@ -137,7 +137,6 @@ mod latency_tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn latency() {
         let mut total_duration = Duration::from_nanos(0);
         let (sender, mut receiver) = make_channel(128).expect("couldn't construct channel");

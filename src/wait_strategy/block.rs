@@ -90,7 +90,7 @@ where
         }
         #[allow(clippy::option_if_let_else)]
         let mut listen_guard = match event_listener {
-            None => event_listener.insert(Box::new(self.event.listen())),
+            None => event_listener.insert(Box::new(self.event.listen_async(cx.waker().clone()))),
             Some(lg) => lg,
         };
         loop {
@@ -105,7 +105,8 @@ where
                         *event_listener = None;
                         return Poll::Ready(());
                     }
-                    listen_guard = event_listener.insert(Box::new(self.event.listen()));
+                    listen_guard = event_listener
+                        .insert(Box::new(self.event.listen_async(cx.waker().clone())));
                 }
                 Poll::Pending => {
                     return Poll::Pending;
@@ -163,7 +164,7 @@ where
         }
         #[allow(clippy::option_if_let_else)]
         let mut listen_guard = match event_listener {
-            None => event_listener.insert(Box::new(self.event.listen())),
+            None => event_listener.insert(Box::new(self.event.listen_async(cx.waker().clone()))),
             Some(lg) => lg,
         };
 
@@ -178,7 +179,8 @@ where
                         *event_listener = None;
                         return Poll::Ready(ptr);
                     }
-                    listen_guard = event_listener.insert(Box::new(self.event.listen()));
+                    listen_guard = event_listener
+                        .insert(Box::new(self.event.listen_async(cx.waker().clone())));
                 }
                 Poll::Pending => {
                     return Poll::Pending;
