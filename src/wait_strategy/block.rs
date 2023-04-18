@@ -3,10 +3,9 @@
 use crate::wait_strategy::{
     AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
 };
-use event_listener::{Event, EventListener};
-use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 use std::time::Instant;
+use wake_me::Event;
 
 /// A wait strategy that uses an event listener to wait for a condition to be met.
 #[allow(clippy::module_name_repetitions)]
@@ -18,9 +17,9 @@ pub struct BlockStrategy {
 impl BlockStrategy {
     /// Creates a new block strategy.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            event: Event::new(),
+            event: Event::default(),
         }
     }
 }
@@ -33,11 +32,11 @@ impl Clone for BlockStrategy {
 
 impl Notifiable for BlockStrategy {
     fn notify_all(&self) {
-        self.event.notify(usize::MAX);
+        self.event.notify_all();
     }
 
     fn notify_one(&self) {
-        self.event.notify(1);
+        self.event.notify_one();
     }
 }
 
@@ -46,13 +45,12 @@ where
     W: Waitable,
 {
     fn wait_for(&self, waitable: &W, expected_value: &W::Inner) {
-        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
-            listen_guard.as_mut().listen();
+            let listen_guard = self.event.listen();
             if waitable.check(expected_value) {
                 return;
             }
-            listen_guard.as_mut().wait();
+            listen_guard.wait();
             if waitable.check(expected_value) {
                 return;
             }
@@ -65,13 +63,12 @@ where
         expected_value: &W::Inner,
         deadline: Instant,
     ) -> Result<(), WaitError> {
-        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
-            listen_guard.as_mut().listen();
+            let listen_guard = self.event.listen();
             if waitable.check(expected_value) {
                 return Ok(());
             }
-            if !listen_guard.as_mut().wait_deadline(deadline) {
+            if listen_guard.wait_deadline(deadline).is_err() {
                 return Err(WaitError::Timeout);
             }
             if waitable.check(expected_value) {
@@ -85,7 +82,7 @@ where
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: &W::Inner,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()> {
         if waitable.check(expected_value) {
             *event_listener = None;
@@ -93,7 +90,7 @@ where
         }
         #[allow(clippy::option_if_let_else)]
         let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
+            None => event_listener.insert(Box::new(self.event.listen())),
             Some(lg) => lg,
         };
         loop {
@@ -101,14 +98,14 @@ where
                 *event_listener = None;
                 return Poll::Ready(());
             }
-            let poll = listen_guard.as_mut().poll_event(cx);
+            let poll = listen_guard.poll(cx);
             match poll {
                 Poll::Ready(_) => {
                     if waitable.check(expected_value) {
                         *event_listener = None;
                         return Poll::Ready(());
                     }
-                    listen_guard = event_listener.insert(self.event.listen());
+                    listen_guard = event_listener.insert(Box::new(self.event.listen()));
                 }
                 Poll::Pending => {
                     return Poll::Pending;
@@ -123,13 +120,12 @@ where
     T: Takeable,
 {
     fn take(&self, takeable: &T) -> T::Inner {
-        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
-            listen_guard.as_mut().listen();
+            let listen_guard = self.event.listen();
             if let Some(value) = takeable.try_take() {
                 return value;
             }
-            listen_guard.as_mut().wait();
+            listen_guard.wait();
             if let Some(value) = takeable.try_take() {
                 return value;
             }
@@ -141,13 +137,12 @@ where
     }
 
     fn take_before(&self, takeable: &T, deadline: Instant) -> Result<T::Inner, WaitError> {
-        let mut listen_guard = pin!(EventListener::new(&self.event));
         loop {
-            listen_guard.as_mut().listen();
+            let listen_guard = self.event.listen();
             if let Some(v) = takeable.try_take() {
                 return Ok(v);
             }
-            if !listen_guard.as_mut().wait_deadline(deadline) {
+            if listen_guard.wait_deadline(deadline).is_err() {
                 return Err(WaitError::Timeout);
             }
             if let Some(v) = takeable.try_take() {
@@ -160,7 +155,7 @@ where
         &self,
         cx: &mut Context<'_>,
         takeable: &T,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<T::Inner> {
         if let Some(ptr) = takeable.try_take() {
             *event_listener = None;
@@ -168,7 +163,7 @@ where
         }
         #[allow(clippy::option_if_let_else)]
         let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
+            None => event_listener.insert(Box::new(self.event.listen())),
             Some(lg) => lg,
         };
 
@@ -177,14 +172,13 @@ where
                 *event_listener = None;
                 return Poll::Ready(ptr);
             }
-            let poll = listen_guard.as_mut().poll_event(cx);
-            match poll {
+            match listen_guard.poll(cx) {
                 Poll::Ready(_) => {
                     if let Some(ptr) = takeable.try_take() {
                         *event_listener = None;
                         return Poll::Ready(ptr);
                     }
-                    listen_guard = event_listener.insert(self.event.listen());
+                    listen_guard = event_listener.insert(Box::new(self.event.listen()));
                 }
                 Poll::Pending => {
                     return Poll::Pending;

@@ -15,6 +15,7 @@ use portable_atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::Instant;
 use thiserror::Error as ThisError;
+use wake_me::State;
 
 /// Errors that can occur while waiting for some event to occur
 #[derive(Debug, ThisError)]
@@ -29,7 +30,10 @@ pub enum WaitError {
 /// held in the form of the type that implements this trait. This allows us to poll that registration on
 /// the event at a later state.
 /// This is only used to implement async behaviour.
-pub trait AsyncEventGuard {}
+pub trait AsyncEventGuard {
+    /// Poll the event to see if it has been triggered
+    fn poll(&self, cx: &mut Context<'_>) -> Poll<()>;
+}
 
 /// A type that can be waited on by checking if the value matches the expected value
 pub trait Waitable {
@@ -279,4 +283,12 @@ impl Takeable for AtomicUsize {
     }
 }
 
-impl AsyncEventGuard for wake_me::WaitGuard {}
+impl AsyncEventGuard for wake_me::WaitGuard {
+    fn poll(&self, _: &mut Context<'_>) -> Poll<()> {
+        match self.get_state() {
+            State::Waiting => Poll::Pending,
+            State::Notified => Poll::Ready(()),
+            State::Dropped => panic!("WaitGuard was dropped"),
+        }
+    }
+}

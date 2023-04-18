@@ -33,7 +33,6 @@ use super::{
     block::BlockStrategy, AsyncEventGuard, Notifiable, Take, Takeable, Wait, WaitError, Waitable,
 };
 use core::fmt::Debug;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
@@ -97,7 +96,7 @@ impl HybridWait {
     /// });
     /// ```
     #[must_use]
-    pub const fn new(num_spin: u64, num_yield: u64) -> Self {
+    pub fn new(num_spin: u64, num_yield: u64) -> Self {
         Self {
             num_spin,
             num_yield,
@@ -180,7 +179,7 @@ where
         cx: &mut Context<'_>,
         waitable: &W,
         expected_value: &W::Inner,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<()> {
         Wait::poll(&self.block, cx, waitable, expected_value, event_listener)
     }
@@ -242,7 +241,7 @@ where
         &self,
         cx: &mut Context<'_>,
         takeable: &T,
-        event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
+        event_listener: &mut Option<Box<dyn AsyncEventGuard>>,
     ) -> Poll<T::Inner> {
         Take::poll(&self.block, cx, takeable, event_listener)
     }
