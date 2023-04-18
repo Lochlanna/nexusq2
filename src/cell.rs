@@ -1,14 +1,14 @@
 use crate::wait_strategy::{hybrid::HybridWait, AsyncEventGuard, Wait, WaitError};
 use core::fmt::{Debug, Formatter};
-use std::cell::UnsafeCell;
 use portable_atomic::{AtomicUsize, Ordering};
+use std::cell::UnsafeCell;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 pub struct Cell<T> {
     value: UnsafeCell<Option<T>>,
-    counter: AtomicUsize,
+    read_counter: AtomicUsize,
     current_id: AtomicUsize,
     wait_strategy: Box<dyn Wait<AtomicUsize>>,
 }
@@ -21,7 +21,7 @@ where
         // write all members of cell excluding wait_strategy
         f.debug_struct("Cell")
             .field("value", &self.value)
-            .field("counter", &self.counter)
+            .field("read_counter", &self.read_counter)
             .field("current_id", &self.current_id)
             .finish()
     }
@@ -39,21 +39,22 @@ impl<T> Cell<T> {
     pub fn new(ws: impl Wait<AtomicUsize> + 'static) -> Self {
         Self {
             value: UnsafeCell::new(None),
-            counter: AtomicUsize::new(0),
+            read_counter: AtomicUsize::new(0),
             current_id: AtomicUsize::new(usize::MAX),
             wait_strategy: Box::new(ws),
         }
     }
 
     pub fn wait_for_write_safe(&self) {
-        self.wait_strategy.wait_for(&self.counter, &0);
+        self.wait_strategy.wait_for(&self.read_counter, &0);
     }
     pub fn wait_for_write_safe_with_timeout(&self, timeout: Duration) -> Result<(), WaitError> {
         self.wait_strategy
-            .wait_until(&self.counter, &0, Instant::now() + timeout)
+            .wait_until(&self.read_counter, &0, Instant::now() + timeout)
     }
     pub fn wait_for_write_safe_before(&self, deadline: Instant) -> Result<(), WaitError> {
-        self.wait_strategy.wait_until(&self.counter, &0, deadline)
+        self.wait_strategy
+            .wait_until(&self.read_counter, &0, deadline)
     }
 
     pub fn poll_write_safe(
@@ -62,7 +63,7 @@ impl<T> Cell<T> {
         event_listener: &mut Option<Pin<Box<dyn AsyncEventGuard>>>,
     ) -> Poll<()> {
         self.wait_strategy
-            .poll(cx, &self.counter, &0, event_listener)
+            .poll(cx, &self.read_counter, &0, event_listener)
     }
 
     pub fn wait_for_published(&self, expected_published_id: usize) {
@@ -107,7 +108,7 @@ impl<T> Cell<T> {
 //write side functions
 impl<T> Cell<T> {
     pub fn safe_to_write(&self) -> bool {
-        self.counter.load(Ordering::Acquire) == 0
+        self.read_counter.load(Ordering::Acquire) == 0
     }
 
     pub fn write_and_publish(&self, value: T, id: usize) {
@@ -122,7 +123,7 @@ impl<T> Cell<T> {
 //read side functions
 impl<T> Cell<T> {
     pub fn move_from(&self) {
-        let old = self.counter.fetch_sub(1, Ordering::Release);
+        let old = self.read_counter.fetch_sub(1, Ordering::Release);
         debug_assert!(old >= 1);
         if old == 1 {
             // only wake if there are no more readers on the cell
@@ -131,7 +132,7 @@ impl<T> Cell<T> {
     }
 
     pub fn move_to(&self) {
-        self.counter.fetch_add(1, Ordering::Relaxed);
+        self.read_counter.fetch_add(1, Ordering::Relaxed);
     }
 }
 impl<T> Cell<T>
@@ -139,12 +140,13 @@ where
     T: Clone,
 {
     pub unsafe fn read(&self) -> T {
-        (*UnsafeCell::raw_get(&self.value)).as_ref().unwrap_unchecked().clone()
+        (*UnsafeCell::raw_get(&self.value))
+            .as_ref()
+            .unwrap_unchecked()
+            .clone()
     }
 
     pub fn read_opt(&self) -> Option<T> {
-        unsafe {
-            (*UnsafeCell::raw_get(&self.value)).clone()
-        }
+        unsafe { (*UnsafeCell::raw_get(&self.value)).clone() }
     }
 }
