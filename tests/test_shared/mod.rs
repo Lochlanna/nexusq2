@@ -62,7 +62,7 @@ pub fn advanced_test<CWS>(
     let sender_barrier = Arc::new(std::sync::Barrier::new(senders.len() + 1));
 
     for sender in senders {
-        let sb_clone = Arc::clone(&sender_barrier);
+        let sb_clone = sender_barrier.clone();
         thread::spawn(move || {
             let sender = sender_thread(num, sender_lag, average_jitter, sender);
             sb_clone.wait();

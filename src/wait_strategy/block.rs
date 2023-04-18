@@ -91,11 +91,7 @@ where
             *event_listener = None;
             return Poll::Ready(());
         }
-        #[allow(clippy::option_if_let_else)]
-        let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
-            Some(lg) => lg,
-        };
+        let mut listen_guard = event_listener.get_or_insert(self.event.listen());
         loop {
             if waitable.check(expected_value) {
                 *event_listener = None;
@@ -166,11 +162,7 @@ where
             *event_listener = None;
             return Poll::Ready(ptr);
         }
-        #[allow(clippy::option_if_let_else)]
-        let mut listen_guard = match event_listener {
-            None => event_listener.insert(self.event.listen()),
-            Some(lg) => lg,
-        };
+        let mut listen_guard = event_listener.get_or_insert(self.event.listen());
 
         loop {
             if let Some(ptr) = takeable.try_take() {

@@ -50,7 +50,7 @@ pub async fn advanced_test(
     let sender_barrier = Arc::new(tokio::sync::Barrier::new(senders.len() + 1));
 
     for sender in senders {
-        let sb_clone = Arc::clone(&sender_barrier);
+        let sb_clone = sender_barrier.clone();
         tokio::spawn(async move {
             let sender = sender_thread(num, sender_lag, average_jitter, sender).await;
             sb_clone.wait().await;

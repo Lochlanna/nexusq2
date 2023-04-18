@@ -77,7 +77,7 @@ impl<T> Receiver<T> {
     /// Returns a new Sender that can be used to send data to the channel this receiver is connected to.
     #[must_use]
     pub fn new_sender(&self) -> crate::Sender<T> {
-        crate::Sender::new(Arc::clone(&self.nexus))
+        crate::Sender::new(self.nexus.clone())
     }
 }
 
@@ -91,8 +91,8 @@ impl<T> Clone for Receiver<T> {
         previous_cell.move_to();
         self.nexus.num_receivers.add(1, Ordering::Relaxed);
         Self {
-            nexus: Arc::clone(&self.nexus),
-            buffer: Arc::clone(&self.buffer),
+            nexus: self.nexus.clone(),
+            buffer: self.buffer.clone(),
             cursor: self.cursor,
             previous_cell_index: self.previous_cell_index,
             current_event: None,

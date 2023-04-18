@@ -89,8 +89,8 @@ impl<T> Clone for Sender<T> {
         debug_assert!(self.async_state.event_guard.is_none());
         debug_assert!(self.async_state.id.is_none());
         Self {
-            nexus: Arc::clone(&self.nexus),
-            buffer: Arc::clone(&self.buffer),
+            nexus: self.nexus.clone(),
+            buffer: self.buffer.clone(),
             async_state: AsyncState::default(),
         }
     }

@@ -71,8 +71,8 @@ async fn run_test(
     let stop_barrier = Arc::new(tokio::sync::Barrier::new(writers + 1));
 
     senders.into_iter().for_each(|s| {
-        let start = Arc::clone(&start_barrier);
-        let stop = Arc::clone(&stop_barrier);
+        let start = start_barrier.clone();
+        let stop = stop_barrier.clone();
         tokio::spawn(async move {
             start.wait().await;
             let s = write_n(s, num).await;

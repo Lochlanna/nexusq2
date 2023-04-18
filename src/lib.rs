@@ -189,7 +189,7 @@ where
     R: Wait<AtomicUsize> + 'static + Clone,
 {
     let nexus = Arc::new(NexusQ::with_strategies(size, writer_ws, reader_ws)?);
-    let receiver = Receiver::new(Arc::clone(&nexus));
+    let receiver = Receiver::new(nexus.clone());
     let sender = Sender::new(nexus);
     Ok((sender, receiver))
 }
@@ -313,7 +313,7 @@ mod drop_tests {
         fn new(counter: &Arc<AtomicU64>) -> Self {
             Self {
                 value: 42_424_242,
-                counter: Arc::clone(counter),
+                counter: counter.clone(),
             }
         }
     }

@@ -74,7 +74,7 @@ fn run_test(
 
     let sender_barrier = Arc::new(Barrier::new(writers + 1));
     let sender_thunks = senders.into_iter().map(|s| {
-        let barrier = Arc::clone(&sender_barrier);
+        let barrier = sender_barrier.clone();
         Thunk::of(move || {
             let (res, s) = write_n(s, iterations as usize);
             barrier.wait();
