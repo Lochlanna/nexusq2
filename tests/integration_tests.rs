@@ -8,6 +8,8 @@ mod standard_stress_tests {
     use super::*;
     #[cfg(feature = "backoff")]
     use crate::test_shared::advanced_test;
+    use crate::test_shared::Lag;
+
     #[test]
     fn one_sender_one_receiver() {
         test(1, 1, 100, 5);
@@ -47,9 +49,7 @@ mod standard_stress_tests {
             2,
             100,
             5,
-            Duration::default(),
-            Duration::default(),
-            0.0,
+            Lag::default(),
             nexusq2::wait_strategy::backoff::BackoffWait::default(),
             nexusq2::wait_strategy::backoff::BackoffWait::default,
         );
@@ -64,9 +64,7 @@ mod standard_stress_tests {
             2,
             1000,
             5,
-            Duration::default(),
-            Duration::default(),
-            0.0,
+            Lag::default(),
             nexusq2::wait_strategy::backoff::BackoffWait::default(),
             nexusq2::wait_strategy::backoff::BackoffWait::default,
         );

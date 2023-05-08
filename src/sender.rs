@@ -119,14 +119,13 @@ where
         let nexus = self.nexus.as_ref();
         let buffer = self.buffer.as_ref();
 
-        if nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Err(SendError::Disconnected(Some(value)));
-        }
         let id = nexus.write_head_wait_strategy.take(&nexus.write_head);
         let cell_index = id.fast_mod(buffer.len());
         let cell = unsafe { buffer.get_unchecked(cell_index) };
 
-        cell.wait_for_write_safe();
+        if cell.wait_for_write_safe() && nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+            return Err(SendError::Disconnected(Some(value)));
+        }
 
         nexus.write_head.restore(id.wrapping_add(1));
         nexus.write_head_wait_strategy.notify_one();
@@ -202,9 +201,6 @@ where
     /// assert_eq!(receiver.recv(), 3);
     /// ```
     pub fn try_send_before(&self, value: T, deadline: Instant) -> Result<(), SendError<T>> {
-        if self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
-            return Err(SendError::Disconnected(Some(value)));
-        }
         if deadline < Instant::now() {
             return Err(SendError::Timeout(value));
         }
@@ -215,7 +211,11 @@ where
         let cell_index = id.fast_mod(self.buffer.len());
         let cell = unsafe { self.buffer.get_unchecked(cell_index) };
 
-        if cell.wait_for_write_safe_before(deadline).is_err() {
+        if let Ok(was_immediate) = cell.wait_for_write_safe_before(deadline) {
+            if was_immediate && self.nexus.num_receivers.load(Ordering::Relaxed) == 0 {
+                return Err(SendError::Disconnected(Some(value)));
+            }
+        } else {
             self.nexus.write_head.restore(id);
             return Err(SendError::Timeout(value));
         }

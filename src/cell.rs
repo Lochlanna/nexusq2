@@ -45,16 +45,21 @@ impl<T> Cell<T> {
         }
     }
 
-    pub fn wait_for_write_safe(&self) {
+    pub fn wait_for_write_safe(&self) -> bool {
+        if self.read_counter.load(Ordering::Acquire) == 0 {
+            return true;
+        }
         self.wait_strategy.wait_for(&self.read_counter, &0);
+        false
     }
-    pub fn wait_for_write_safe_with_timeout(&self, timeout: Duration) -> Result<(), WaitError> {
+
+    pub fn wait_for_write_safe_before(&self, deadline: Instant) -> Result<bool, WaitError> {
+        if self.read_counter.load(Ordering::Acquire) == 0 {
+            return Ok(true);
+        }
         self.wait_strategy
-            .wait_until(&self.read_counter, &0, Instant::now() + timeout)
-    }
-    pub fn wait_for_write_safe_before(&self, deadline: Instant) -> Result<(), WaitError> {
-        self.wait_strategy
-            .wait_until(&self.read_counter, &0, deadline)
+            .wait_until(&self.read_counter, &0, deadline)?;
+        Ok(false)
     }
 
     pub fn poll_write_safe(
